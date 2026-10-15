@@ -1,5 +1,7 @@
 # LOOI DF26 · iOS
 
+<img src="App/Assets.xcassets/AppIcon.appiconset/AppIcon1024.png" alt="LOOI iOS App icon" width="128" height="128">
+
 [简体中文](#简体中文) · [English](#english)
 
 ## 简体中文
