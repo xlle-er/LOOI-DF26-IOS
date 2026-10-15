@@ -160,7 +160,7 @@ import Combine
             do {
                 let config = settings.configuration
                 if config.isLive {
-                    try await live.start(config, testOnly: true); live.sendText("请只说一句：你好，语音测试成功。")
+                    try await live.start(config, testOnly: true); live.sendText(LooiConversationLanguage.testPrompt(fallback: LooiLocalization.shared.language))
                     let limit = Date().addingTimeInterval(25)
                     while !Task.isCancelled && current == token && Date() < limit {
                         if !live.error.isEmpty { throw LooiError.message(live.error) }
@@ -169,20 +169,20 @@ import Combine
                     }
                     guard live.receivedAudioChunks > 0, live.turnComplete, !live.speaking else { throw LooiError.message("AI 测试未完成语音播放，请检查网络和模型") }
                     if current == token { notice = "AI 测试成功，语音已收到并播放。" }
-                } else { let reply = try await textRequest("请用中文说一句你好。"); if current == token { textReply = reply; notice = config.isOffline ? "离线陪伴已就绪。" : "AI 文本测试成功。" } }
+                } else { let reply = try await textRequest(LooiConversationLanguage.testPrompt(fallback: LooiLocalization.shared.language)); if current == token { textReply = reply; notice = config.isOffline ? "离线陪伴已就绪。" : "AI 文本测试成功。" } }
             } catch { if current == token { notice = LooiAIRequest.redact(error.localizedDescription) } }
             guard current == token else { return }; live.stop(); phase = .idle
         }
     }
     func textRequest(_ text: String, image: Data? = nil, allowActions: Bool = false) async throws -> String {
         let config = settings.configuration
-        if config.isOffline { return "你好，我是 LOOI，很高兴和你待在一起。" }
+        if config.isOffline { return LooiConversationLanguage.offlineReply(to: text, fallback: LooiLocalization.shared.language) }
         let key = try await LooiCredentials.token(config)
-        var instruction = "你是温暖简洁的桌面伙伴 LOOI，请用自然中文回应。"
+        var instruction = "You are LOOI, a warm, concise desktop companion. " + LooiConversationLanguage.instruction(fallback: LooiLocalization.shared.language)
         if allowActions {
-            instruction += "只输出 JSON：{\"text\":\"给用户的自然回复\",\"scenario\":null}。只有用户明确要求动作时才选择 scenario，且只能从以下名称选择：\(scenarioNames.sorted().joined(separator: ","))。身体连接：\(body.isConnected)，动作许可：\(settings.motionEnabled)。未连接或未获动作许可时 scenario 必须为 null，不得声称已移动。不要向用户说内部动作名称。"
+            instruction += "Return only JSON: {\"text\":\"your natural reply in the user’s language\",\"scenario\":null}. Choose a scenario only when the user explicitly asks for movement, and only from: \(scenarioNames.sorted().joined(separator: ",")). Body connected: \(body.isConnected). Motion allowed: \(settings.motionEnabled). If disconnected or movement is not permitted, scenario must be null. Never claim to have moved when movement is unavailable. Never mention internal scenario names."
         }
-        let request = try LooiAIRequest.text(config, key: key, prompt: instruction + "\n用户：" + text, image: image)
+        let request = try LooiAIRequest.text(config, key: key, prompt: text, image: image, systemInstruction: instruction)
         let (data, response) = try await URLSession.shared.data(for: request)
         return try LooiAIRequest.response(data, status: (response as? HTTPURLResponse)?.statusCode ?? 0, provider: config.provider)
     }

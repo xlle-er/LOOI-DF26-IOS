@@ -117,4 +117,37 @@ check(testGeneration["maxOutputTokens"] as? Int == 256 && testGeneration["respon
 check((testLive["tools"] as? [Any])?.isEmpty == true && (testLive["sessionResumption"] as? [String: Any])?.isEmpty == true, "AI test isolates tools and previous conversation")
 let regularLive = LooiLiveConfiguration.setup(originalLive, model: "models/regular", testOnly: false)
 check((regularLive["generationConfig"] as? [String: Any])?["maxOutputTokens"] == nil && (regularLive["tools"] as? [Any])?.count == 1, "normal companion retains original configuration")
+check(LooiLocalization.resolve(.system, preferred: ["zh-Hant-TW", "en-US"]) == "zh-Hans", "Chinese system locale resolves to Chinese")
+check(LooiLocalization.resolve(.system, preferred: ["en-GB", "zh-Hans"]) == "en", "English system locale resolves to English")
+check(LooiLocalization.resolve(.system, preferred: ["fr-FR"]) == "en", "unsupported interface language falls back to English")
+check(LooiLocalization.resolve(.chinese, preferred: ["en"]) == "zh-Hans", "explicit app language overrides system locale")
+check(LooiLocalization.string("退出陪伴", language: "en") == "Exit companion", "English localization resource is loaded")
+check(LooiLocalization.string("退出陪伴", language: "zh-Hans") == "退出陪伴", "Chinese source is retained")
+check(LooiLocalization.message("正在连接 我的桌面机器人…", language: "en") == "Connecting to 我的桌面机器人…", "dynamic robot name is never translated")
+check(LooiLocalization.message("实时连接中断：连接失败", language: "en") == "Live connection interrupted: Connection failed", "nested known runtime error is localized")
+check(LooiLocalization.message("播放恢复失败：custom server detail", language: "en") == "Playback recovery failed: custom server detail", "unknown error details remain intact")
+let languageDefaults = UserDefaults(suiteName: "looi.language.tests.\(UUID().uuidString)")!
+let languageStore = LooiLocalization(defaults: languageDefaults)
+languageStore.selection = .english
+check(LooiLocalization(defaults: languageDefaults).selection == .english, "language selection persists")
+languageDefaults.removeObject(forKey: "looi.app.language")
+let englishPolicy = LooiConversationLanguage.instruction(fallback: "en")
+let chinesePolicy = LooiConversationLanguage.instruction(fallback: "zh-Hans")
+check(englishPolicy.contains("latest spoken or typed message") && chinesePolicy.contains("latest spoken or typed message"), "user language wins in both UI languages")
+check(englishPolicy.contains("explicitly requested") && englishPolicy.contains("every turn"), "explicit output-language requests and mid-session changes are supported")
+check(englishPolicy.contains("English as the fallback") && chinesePolicy.contains("Simplified Chinese as the fallback"), "UI language is only a fallback")
+check(LooiConversationLanguage.offlineReply(to: "Hello, how are you today?", fallback: "zh-Hans").hasPrefix("Hello"), "offline English input wins over Chinese interface")
+check(LooiConversationLanguage.offlineReply(to: "你好，今天过得怎么样？", fallback: "en").hasPrefix("你好"), "offline Chinese input wins over English interface")
+let multilingualLive: [String: Any] = ["generationConfig": ["speechConfig": ["languageCode": "zh-CN"]], "systemInstruction": ["parts": [["text": "Identity. <language_style>Always speak Mandarin.</language_style> Keep motion rules."]]]]
+let multilingualSetup = LooiLiveConfiguration.setup(multilingualLive, model: "models/test", testOnly: false)
+let languageParts = (multilingualSetup["systemInstruction"] as! [String: Any])["parts"] as! [[String: Any]]
+let liveInstruction = languageParts.compactMap { $0["text"] as? String }.joined()
+check(!liveInstruction.contains("Always speak Mandarin") && liveInstruction.contains("Keep motion rules") && liveInstruction.contains("latest spoken"), "Live policy removes forced language and preserves safety rules")
+check(((multilingualSetup["generationConfig"] as! [String: Any])["speechConfig"] as! [String: Any])["languageCode"] == nil, "Live speech language is not pinned to interface")
+let separatedRequest = try LooiAIRequest.text(gemini, key: "test-key", prompt: "Hello", systemInstruction: chinesePolicy)
+let separatedBody = try JSONSerialization.jsonObject(with: separatedRequest.httpBody!) as! [String: Any]
+check(separatedBody["systemInstruction"] != nil && (((separatedBody["contents"] as! [[String: Any]])[0]["parts"] as! [[String: Any]])[0]["text"] as? String) == "Hello", "Gemini policy is separate from raw user text")
+let separatedCompatible = try LooiAIRequest.text(.fresh("qwen"), key: "test-key", prompt: "Hello", systemInstruction: chinesePolicy)
+let separatedMessages = (try JSONSerialization.jsonObject(with: separatedCompatible.httpBody!) as! [String: Any])["messages"] as! [[String: Any]]
+check(separatedMessages[0]["role"] as? String == "system" && separatedMessages[1]["content"] as? String == "Hello", "compatible providers receive system and user roles separately")
 print("Native Swift checks passed: \(passed)")

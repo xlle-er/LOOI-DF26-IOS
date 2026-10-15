@@ -21,7 +21,9 @@ LOOI 桌面陪伴机器人的独立 iOS 客户端。使用 SwiftUI 原生界面�
 - **模型配置**：Gemini、Vertex AI、通义千问、Groq、Fireworks、Ollama 和兼容接口，提供默认模型，也允许自定义。实时语音仅适用于支持 Live 的提供商；其他接口使用文字 / 视觉模式。
 - **安全存储**：用户自行填写 API Key，凭据存入 iOS 钥匙串。运动需要连接机器人并明确开启许可。
 
-界面目前主要为简体中文；本 README 同时提供中英文。
+界面支持简体中文和 English，在“AI 服务 → 界面语言”中选择跟随系统、简体中文或 English。状态与错误提示会同步切换；iOS 系统权限弹窗遵循系统 / 单独 App 语言设置。
+
+AI 优先使用用户明确要求的语言，否则跟随用户最新输入或说话的语言，支持对话中途换语言。只有没有明确语言线索时，才使用界面语言。语言设置不会强制把语音回复固定为中文或英文。离线模式提供中英文固定问候，不等同于多语言 AI 模型。
 
 ### 环境与快速开始
 
@@ -69,6 +71,7 @@ npm run build:resources
 
 ```sh
 python3 scripts/test-native.py       # 原生协议、请求、缓冲和配置检查
+python3 scripts/check-localization.py
 python3 scripts/check-privacy.py     # 提交文件的隐私检查（只输出位置，不输出敏感值）
 npx playwright install chromium
 npm run test:face                   # 眼睛布局和动作桥接检查
@@ -107,7 +110,9 @@ An independent iOS client for the LOOI desktop companion robot. It uses native S
 - **Provider presets:** Gemini, Vertex AI, Qwen, Groq, Fireworks, Ollama and compatible endpoints, with editable model defaults. Live speech requires a supported Live provider; other providers use text / vision requests.
 - **Local credentials:** enter your own API key; credentials are stored in the iOS Keychain. Physical movement requires a connected robot and explicit permission.
 
-The app UI is currently primarily Simplified Chinese. This README is bilingual.
+The app UI supports Simplified Chinese and English. In **AI services → App language**, choose System default, 简体中文 or English. App statuses and errors update with the selection; iOS permission dialogs follow the system / per-app language setting.
+
+AI follows the language explicitly requested by the user, otherwise the language of their latest spoken or typed message, including mid-conversation changes. The UI language is only a fallback when no language cue is clear. Live speech is not pinned to the UI language. Offline mode provides fixed Chinese / English greetings rather than multilingual model responses.
 
 ### Requirements and setup
 
@@ -149,6 +154,7 @@ Optional checks:
 
 ```sh
 python3 scripts/test-native.py
+python3 scripts/check-localization.py
 python3 scripts/check-privacy.py
 npx playwright install chromium
 npm run test:face

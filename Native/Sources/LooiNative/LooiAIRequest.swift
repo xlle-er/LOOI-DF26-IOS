@@ -17,7 +17,7 @@ enum LooiAIRequest {
         guard !text.isEmpty, text.range(of: "^[A-Za-z0-9._-]+$", options: .regularExpression) != nil else { throw LooiError.message("模型、项目或区域名称无效") }
         return text
     }
-    static func text(_ config: LooiAIConfiguration, key: String, prompt: String, image: Data? = nil) throws -> URLRequest {
+    static func text(_ config: LooiAIConfiguration, key: String, prompt: String, image: Data? = nil, systemInstruction: String? = nil) throws -> URLRequest {
         var headers = ["Content-Type": "application/json"]
         let url: String
         var body: [String: Any]
@@ -47,6 +47,10 @@ enum LooiAIRequest {
                 if let image { user["content"] = [["type": "text", "text": prompt], ["type": "image_url", "image_url": ["url": "data:image/jpeg;base64,\(image.base64EncodedString())"]]] }
                 body = ["model": config.model, "messages": [user], "max_tokens": 1024]
             }
+        }
+        if let systemInstruction {
+            if ["gemini", "vertex"].contains(config.provider) { body["systemInstruction"] = ["parts": [["text": systemInstruction]]] }
+            else if let messages = body["messages"] as? [[String: Any]] { body["messages"] = [["role": "system", "content": systemInstruction]] + messages }
         }
         if config.provider == "qwen" { body["enable_thinking"] = false }
         guard let target = URL(string: url), ["http", "https"].contains(target.scheme), let host = target.host, !host.isEmpty,

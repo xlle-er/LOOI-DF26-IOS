@@ -56,6 +56,7 @@ private enum LooiDestination: String, Identifiable {
 }
 
 struct LooiRootView: View {
+    @ObservedObject private var localization = LooiLocalization.shared
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject var app: LooiAppModel
     @State private var destination: LooiDestination?
@@ -74,10 +75,10 @@ struct LooiRootView: View {
                 if companion {
                     Color.clear.contentShape(Rectangle())
                         .onTapGesture { withAnimation { controlsVisible.toggle() } }
-                        .accessibilityElement().accessibilityLabel("陪伴画面，轻点显示退出按钮")
+                        .accessibilityElement().accessibilityLabel(L("陪伴画面，轻点显示退出按钮"))
                         .accessibilityAddTraits(.isButton)
                         .accessibilityAction { controlsVisible = true }
-                        .accessibilityAction(named: Text("退出陪伴")) { exitCompanion() }
+                        .accessibilityAction(named: Text(L("退出陪伴"))) { exitCompanion() }
                     if landscape {
                         LooiCompanionCameraWindow(camera: app.camera, width: min(144, geometry.size.width * 0.16))
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -102,6 +103,7 @@ struct LooiRootView: View {
             .onAppear { app.camera.updateOrientation() }
             .onChange(of: geometry.size) { _ in app.camera.updateOrientation() }
         }
+        .environment(\.locale, localization.locale)
         .preferredColorScheme(.dark)
         .sheet(item: $destination) { destination in
             switch destination {
@@ -111,6 +113,7 @@ struct LooiRootView: View {
         }
         .onChange(of: scenePhase) { phase in
             if phase == .background { Task { await app.stop() } }
+            if phase == .active { localization.refreshSystemLanguage() }
         }
     }
     private var companionOverlay: some View {
@@ -120,7 +123,7 @@ struct LooiRootView: View {
                     .padding(.leading, 160)
                 Spacer()
                 Button(action: exitCompanion) {
-                    Label("退出陪伴", systemImage: "xmark")
+                    Label(L("退出陪伴"), systemImage: "xmark")
                         .font(.headline).padding(.horizontal, 18).frame(minHeight: 48)
                         .background(.ultraThinMaterial, in: Capsule())
                 }.buttonStyle(.plain).accessibilityIdentifier("exitCompanion")
@@ -133,6 +136,7 @@ struct LooiRootView: View {
 }
 
 private struct LooiCompanionCameraWindow: View {
+    @ObservedObject private var localization = LooiLocalization.shared
     @ObservedObject var camera: LooiCamera
     let width: CGFloat
     var body: some View {
@@ -143,13 +147,14 @@ private struct LooiCompanionCameraWindow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.white.opacity(0.25), lineWidth: 1))
                 .shadow(color: .black.opacity(0.3), radius: 8, y: 3)
-                .accessibilityLabel("摄像头实时预览")
+                .accessibilityLabel(L("摄像头实时预览"))
                 .accessibilityIdentifier("companionCameraPreview")
         }
     }
 }
 
 private struct LooiSetupView: View {
+    @ObservedObject private var localization = LooiLocalization.shared
     @ObservedObject var app: LooiAppModel
     @ObservedObject var settings: LooiSettings
     @ObservedObject var bluetooth: LooiBluetooth
@@ -160,14 +165,14 @@ private struct LooiSetupView: View {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("LOOI").font(.system(size: 17, weight: .semibold, design: .rounded)).tracking(4).foregroundStyle(.secondary)
-                    Text("陪伴设置").font(.largeTitle.bold())
-                    Text("准备好后开始陪伴，手机将横屏展示眼睛。")
+                    Text(L("陪伴设置")).font(.largeTitle.bold())
+                    Text(L("准备好后开始陪伴，手机将横屏展示眼睛。"))
                         .font(.subheadline).foregroundStyle(.secondary)
                 }.padding(.top, 22)
                 VStack(spacing: 0) {
-                    setupRow("我的机器人", detail: bluetooth.connectedName, icon: "antenna.radiowaves.left.and.right", action: showRobots)
+                    setupRow(L("我的机器人"), detail: bluetooth.isConnected ? bluetooth.connectedName : L("未连接身体"), icon: "antenna.radiowaves.left.and.right", action: showRobots)
                     Divider().padding(.leading, 58)
-                    setupRow("AI 服务", detail: settings.configuration.preset.title + " · " + (settings.configuration.isLive ? "实时语音与视觉" : "文字与视觉"), icon: "waveform", action: showSettings)
+                    setupRow(L("AI 服务"), detail: L(settings.configuration.preset.title) + " · " + (settings.configuration.isLive ? L("实时语音与视觉") : L("文字与视觉")), icon: "waveform", action: showSettings)
                 }.background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 22))
                 LooiCompanionControls(app: app, live: app.live, camera: app.camera, settings: settings, bodyService: bluetooth, landscape: false)
             }.padding(.horizontal, 22).padding(.bottom, 24)
@@ -189,10 +194,11 @@ private struct LooiSetupView: View {
 }
 
 private struct LooiCallStatus: View {
+    @ObservedObject private var localization = LooiLocalization.shared
     @ObservedObject var live: LooiLiveService
     @ObservedObject var camera: LooiCamera
     var body: some View {
-        Text(live.speaking ? "正在回应" : live.microphone ? (camera.running ? "我在听，也在看" : "我在听") : live.connecting ? "正在连接 AI…" : "就在这里，陪着你")
+        Text(live.speaking ? L("正在回应") : live.microphone ? (camera.running ? L("我在听，也在看") : L("我在听")) : live.connecting ? L("正在连接 AI…") : L("就在这里，陪着你"))
             .font(.caption).foregroundStyle(.secondary)
     }
 }

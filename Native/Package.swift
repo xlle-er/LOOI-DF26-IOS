@@ -3,9 +3,10 @@ import PackageDescription
 
 let package = Package(
     name: "LooiNative",
+    defaultLocalization: "en",
     platforms: [.iOS(.v15)],
     products: [.library(name: "LooiNative", targets: ["LooiNative"])],
     dependencies: [.package(url: "https://github.com/google/GoogleSignIn-iOS.git", from: "9.0.0")],
     targets: [.target(name: "LooiNative", dependencies: [.product(name: "GoogleSignIn", package: "GoogleSignIn-iOS")],
-                      resources: [.copy("Resources/Face"), .process("Resources/LiveSetup.json")])]
+                      resources: [.copy("Resources/Face"), .process("Resources/LiveSetup.json"), .process("Resources/en.lproj"), .process("Resources/zh-Hans.lproj")])]
 )

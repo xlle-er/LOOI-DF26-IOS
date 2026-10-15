@@ -143,6 +143,26 @@ still pass through native motion permission and command validation. AI connectio
 tests never execute model-requested movement. Stop phrases disarm body movement
 without ending the conversation.
 
+## Localization and conversation language
+
+`LooiLocalization` owns a persisted System default / Simplified Chinese / English
+selection. Standard `.lproj/Localizable.strings` resources live in the Swift Package;
+localized permission descriptions live in the application target. Native views
+observe language changes without recreating the app model or discarding a settings
+draft. Services retain source messages; known status and error strings are translated
+when displayed. Model replies, user text, custom model IDs and robot aliases remain
+opaque. System permission sheets follow iOS system/per-app language preferences.
+
+`LooiConversationLanguage` builds a shared policy for Live and text providers:
+explicit user language requests take precedence, followed by the latest spoken or
+typed input; UI language is only the fallback. The policy applies on every turn.
+Live setup removes the previous language block and any pinned speech language code,
+while retaining identity, tool and safety rules. Text providers send policy as a
+system instruction separately from user content. Changing interface language clears
+resumption across subsequent Live sessions; it does not tear down a running call.
+Language selection is disabled outside the idle phase. Offline mode recognizes
+Chinese/English for fixed greetings; other languages require an AI provider.
+
 ## Models and migration
 
 Provider presets fill a default model and offer a menu plus custom input. Existing

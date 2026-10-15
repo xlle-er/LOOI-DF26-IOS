@@ -1,0 +1,4 @@
+"NSBluetoothAlwaysUsageDescription" = "LOOI uses Bluetooth to connect to nearby robot bodies.";
+"NSCameraUsageDescription" = "LOOI uses the camera to understand the scenes you choose to share.";
+"NSLocalNetworkUsageDescription" = "LOOI can connect to the model service you configure on your local network.";
+"NSMicrophoneUsageDescription" = "LOOI uses the microphone for live conversations.";

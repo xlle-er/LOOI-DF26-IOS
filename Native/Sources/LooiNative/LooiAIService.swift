@@ -62,6 +62,7 @@ import GoogleSignIn
     private var resumeHandle: String?
     private var previousConfig: LooiAIConfiguration?
     private var previousWasTest = false
+    private var previousLanguage: String?
     private var discardAudioUntilTurnComplete = false
     init() { audio.activate = { try Self.activateAudio() } }
     private static func activateAudio() throws {
@@ -74,8 +75,8 @@ import GoogleSignIn
     }
     func start(_ config: LooiAIConfiguration, testOnly: Bool = false) async throws {
         stop(clearResume: false)
-        if previousConfig != config || testOnly || previousWasTest { resumeHandle = nil }
-        previousConfig = config; previousWasTest = testOnly; discardAudioUntilTurnComplete = false
+        if previousConfig != config || testOnly || previousWasTest || previousLanguage != LooiLocalization.shared.language { resumeHandle = nil }
+        previousConfig = config; previousWasTest = testOnly; previousLanguage = LooiLocalization.shared.language; discardAudioUntilTurnComplete = false
         generation += 1; let token = generation
         connecting = true; error = ""; reply = ""; heard = ""; sentVideoFrames = 0; receivedAudioChunks = 0; turnComplete = false
         do {

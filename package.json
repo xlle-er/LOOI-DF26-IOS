@@ -6,6 +6,7 @@
   "scripts": {
     "build:resources": "node scripts/build-resources.mjs",
     "test:native": "python3 scripts/test-native.py",
+    "check:localization": "python3 scripts/check-localization.py",
     "test:face": "playwright test",
     "check:privacy": "python3 scripts/check-privacy.py"
   },
