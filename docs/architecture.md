@@ -115,6 +115,44 @@ reassembly across UTF-8 byte boundaries. Emergency stop cancels queued motion,
 separates a partially written JSON frame, and coalesces simultaneous stop requests.
 Movement faults disarm motion while leaving the AI conversation available.
 
+## Manual remote
+
+`LooiRemoteControl` coordinates a native joystick/direction pad, a single gesture
+owner, short motion leases and stop barriers. Its transport closures are main-actor
+isolated and injectable for deterministic tests. Standalone remote is a portrait
+sheet and starts no AI/camera; companion remote is an inline landscape panel that
+keeps the eyes, existing media and camera preview alive. The panel never auto-hides.
+
+Taking manual control cancels the previous scenario and clears AI movement
+permission. Native JS/body and AI scenario entry points reject body actions while
+manual control is presented. Voice stop requests also invalidate manual input;
+closing the panel does not restore AI movement permission automatically.
+
+Joystick input uses a 12% radial dead zone and scales the combined linear/angular
+magnitudes to the selected relative speed (default 0.15, range 0.05–0.30). Positive
+linear is forward and positive angular is right, matching the original scenarios.
+Each command has a 400 ms duration and 60 ms ramp. Commands wait for their ACK,
+then wait 100 ms before sampling the newest input; no intermediate target queue
+is kept. This limits frequency rather than guaranteeing an exact 10 Hz rate.
+
+Remote commands and stops use 250 ms deadlines. BLE deadlines start when queued,
+including a stop waiting behind an in-flight GATT write. A cancelled write callback
+releases its barrier without completing an unrelated replacement command. On
+transport timeout the app disconnects, requests no more motion and relies on the
+firmware's finite command duration and disconnect-stop behavior. Firmware stopping
+of motor output is not proof of an instantaneous physical stop.
+
+Release, cancelled touches, mode changes, close, backgrounding and faults invalidate
+the control epoch. A held finger or late ACK cannot restart cancelled motion. A
+new gesture is required after a stop; connection failure requires retry. UI handles
+multitouch ownership and prevents a finger held during preparation from arming
+itself when preparation completes. VoiceOver actions issue short bounded pulses.
+
+Tests cover mapping, bounds, stop admission, cancellation, latest-target behavior,
+late ACKs, mode changes, connection loss and failed preparation using a fake robot.
+Core Bluetooth radio timing, physical directions and stopping remain device tests.
+No firmware changes or flashing are part of this implementation.
+
 ## Media and lifecycle
 
 Start/stop/testing are explicit native phases. A generation token invalidates old

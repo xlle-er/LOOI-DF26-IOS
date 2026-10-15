@@ -20,3 +20,9 @@ with tempfile.TemporaryDirectory(prefix='looi-native-tests-') as folder:
     for language in ['en', 'zh-Hans']:
         shutil.copytree(root / 'Native/Sources/LooiNative/Resources' / (language + '.lproj'), bundle / (language + '.lproj'))
     subprocess.run([str(output)], check=True, env={**os.environ, 'LOOI_TEST_BUNDLE': str(bundle)})
+
+    remote_output = Path(folder) / 'remote-checks'
+    subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-module-cache-path', str(Path(folder) / 'cache'),
+                    *[str(root / 'Native/Sources/LooiNative' / (name + '.swift')) for name in ['LooiSettings', 'LooiBodyProtocol', 'LooiRemoteControl']],
+                    str(root / 'Tests/remote/RemoteTests.swift'), '-o', str(remote_output)], check=True)
+    subprocess.run([str(remote_output)], check=True)

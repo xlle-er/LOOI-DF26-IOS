@@ -17,6 +17,7 @@ LOOI 桌面陪伴机器人的独立 iOS 客户端。使用 SwiftUI 原生界面�
 - **竖屏设置、横屏陪伴**：竖屏配置 AI 和机器人；开始陪伴后请求横屏显示眼睛。轻点横屏画面显示“退出陪伴”，退出后返回竖屏。
 - **实时语音与视觉**：Gemini / Vertex Live，通过原生 WebSocket 持续收发音频，并按需发送摄像头画面；横屏保留实时摄像头预览小窗。
 - **连续语音播放**：分段缓冲、短时预缓冲、播放停滞检测和有限次数的自动恢复。
+- **手动遥控**：摇杆与方向键切换，支持独立遥控及陪伴中遥控，按住运动、松手停止。手动控制暂停 AI 身体动作；独立遥控不启动 AI 或相机。
 - **机器人列表**：显示附近设备的名称、标识后缀和信号强度，支持本地别名、“我的机器人”标记、点头识别和动作测试。
 - **模型配置**：Gemini、Vertex AI、通义千问、Groq、Fireworks、Ollama 和兼容接口，提供默认模型，也允许自定义。实时语音仅适用于支持 Live 的提供商；其他接口使用文字 / 视觉模式。
 - **安全存储**：用户自行填写 API Key，凭据存入 iOS 钥匙串。运动需要连接机器人并明确开启许可。
@@ -49,6 +50,12 @@ open LOOI.xcodeproj
 4. 在 App 的 **AI 服务** 中选择提供商、模型并填写自己的凭据，先测试声音和 AI，再开始陪伴。无硬件时可不连接机器人。
 
 **无需 Node.js、Capacitor、网页服务器或后端即可从 Xcode 构建。** 眼睛资源与 Live 配置已包含在 Swift Package 内。原始网页、Android、固件构建产物和个人设备配置未复制到此仓库。
+
+### 遥控器
+
+连接自己的机器人后，在设置页打开“遥控器”，或在横屏陪伴的控制浮层打开。支持摇杆 / 方向键、相对速度调节和停止按钮。初始速度值为 0.15，可调 0.05～0.30；它是控制量，不代表米每秒或准确的电机占空比。急停后必须松手再重新操作。关闭遥控后，AI 身体动作许可仍保持关闭。
+
+需要固件支持现有 BLE 的 `motion`、`stop`、指令 ID 确认和限时自动停止。兼容该协议的 `looi.ino` 无需为本功能重新烧录。第一次测试请架空车轮核对方向；此仓库不包含固件或你的硬件引脚配置。
 
 ### 模型和账号
 
@@ -92,6 +99,7 @@ xcodebuild -project LOOI.xcodeproj -scheme LOOI \
 | `Native/` | Swift Package；原生 UI、AI、音视频、蓝牙和打包后的眼睛资源 |
 | `FaceSource/` | 原始眼睛动画、动作编排及其最小依赖，可重新构建 |
 | `Config/` | 可提交的配置与个人签名配置模板 |
+| `icon.png` | 可直接提取的原始 1024×1024 App 图标 |
 | `Tests/`, `scripts/` | 原生检查、眼睛检查、资源构建和隐私检查 |
 | `docs/architecture.md` | 架构、媒体生命周期、蓝牙协议及限制 |
 
@@ -106,6 +114,7 @@ An independent iOS client for the LOOI desktop companion robot. It uses native S
 - **Portrait setup, landscape companion:** configure AI and robots in portrait; starting companionship requests landscape for the eyes. Tap to reveal **退出陪伴** (Exit companion); exiting restores portrait setup.
 - **Live voice and vision:** native Gemini / Vertex Live WebSocket sessions with continuous audio and optional camera frames. A small live camera preview stays visible in landscape.
 - **Streaming playback:** sliced audio buffering, a short startup buffer, stall detection and bounded automatic recovery.
+- **Manual remote:** switch between a joystick and direction pad, either independently or during companionship. Hold to drive and release to stop. Manual control pauses AI body movement; standalone remote starts neither AI nor camera.
 - **Nearby robot list:** names, identifier suffixes, signal strength, local aliases, ownership bookmarks, identification nods and motion tests.
 - **Provider presets:** Gemini, Vertex AI, Qwen, Groq, Fireworks, Ollama and compatible endpoints, with editable model defaults. Live speech requires a supported Live provider; other providers use text / vision requests.
 - **Local credentials:** enter your own API key; credentials are stored in the iOS Keychain. Physical movement requires a connected robot and explicit permission.
@@ -132,6 +141,12 @@ open LOOI.xcodeproj
 4. Open **AI 服务** (AI services), select a provider and model, enter your own credentials, and test sound and AI before starting. A robot is optional.
 
 **Building in Xcode does not require Node.js, Capacitor, a web server or a backend.** Eye resources and Live configuration are already packaged. This repository excludes the full website, Android application, firmware build artifacts and personal device configuration.
+
+### Remote control
+
+Connect your robot, then open the remote from portrait setup or the landscape companion controls. Choose the joystick or direction pad, adjust relative speed, and use Stop at any time. The initial control value is 0.15, adjustable from 0.05 to 0.30; this is not a physical speed or exact motor duty cycle. After stopping, release before starting a new gesture. AI movement permission stays off after closing the remote.
+
+Firmware must support the existing BLE `motion` / `stop` protocol, matching command-ID confirmations and duration-based stopping. Compatible `looi.ino` firmware does not need reflashing for this feature. Lift the wheels for initial direction checks. This repository does not include firmware or personal wiring configuration.
 
 ### Models and credentials
 
@@ -173,6 +188,7 @@ The automated checks cover native protocol/request/buffering/configuration behav
 - `Native/`: Swift Package containing native UI, AI, media, Bluetooth and bundled eye resources.
 - `FaceSource/`: editable original eye/motion sources and their minimal dependencies.
 - `Config/`: shared configuration and the local signing template.
+- [`icon.png`](icon.png): the original 1024×1024 app icon for easy extraction.
 - `Tests/` and `scripts/`: checks, resource generation and privacy scanning.
 - [`docs/architecture.md`](docs/architecture.md): implementation details, media lifecycle and Bluetooth protocol.
 

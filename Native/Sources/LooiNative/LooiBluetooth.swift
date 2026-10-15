@@ -37,7 +37,7 @@ struct LooiRobotDevice: Identifiable {
     private var decoder = LooiNotificationDecoder()
     private var queue: [Command] = []
     private var current: Command?
-    private var writeOutstanding = false
+    private var writeOutstanding: String?
     private var stopTask: Task<Bool, Never>?
 
     private final class Command {
@@ -75,7 +75,7 @@ struct LooiRobotDevice: Identifiable {
     }
     func stopScan() { scanRequested = false; central?.stopScan(); scanning = false; scanTimeout?.cancel() }
     func connect(_ id: UUID) {
-        guard connectingID == nil, connectedID == nil, let peripheral = peripherals[id], central?.state == .poweredOn else { return }
+        guard connectingID == nil, connectedID == nil, let peripheral = peripherals[id], peripheral.state == .disconnected, central?.state == .poweredOn else { return }
         stopScan(); active = peripheral; connectingID = id; message = "正在连接 \(displayName(id))…"
         peripheral.delegate = self; central?.connect(peripheral)
         connectionTimeout?.cancel()
@@ -90,22 +90,34 @@ struct LooiRobotDevice: Identifiable {
         if let active { central?.cancelPeripheralConnection(active) }
         clearConnection("身体已断开")
     }
-    func send(_ payload: [String: Any]) async throws -> [String: Any] {
+    func send(_ payload: [String: Any], timeout: TimeInterval = 5) async throws -> [String: Any] {
+        guard stopTask == nil || payload["type"] as? String == "stop" else { throw LooiError.message("正在确认机器人停止…") }
         guard isConnected else { throw LooiError.message("请先连接自己的机器人") }
         guard queue.count < 24 else { throw LooiError.message("动作队列繁忙，请稍后重试") }
         let id = UUID().uuidString
         let bytes = try LooiBodyProtocol.packet(payload, id: id)
         return try await withCheckedThrowingContinuation { continuation in
-            queue.append(Command(id: id, bytes: bytes, continuation: continuation)); pump()
+            let item = Command(id: id, bytes: bytes, continuation: continuation)
+            queue.append(item)
+            // Deadline also covers waiting behind an outstanding write. A stop must
+            // never wait forever after cancelling the old command's timeout.
+            item.timeout = Task { [weak self, weak item] in
+                try? await Task.sleep(nanoseconds: UInt64(max(0.05, timeout) * 1_000_000_000))
+                guard !Task.isCancelled, let self, let item,
+                      self.current === item || self.queue.contains(where: { $0 === item }) else { return }
+                self.message = "蓝牙指令超时，已断开连接，请重新连接机器人"
+                let reason = self.message; self.disconnect(); self.message = reason; self.onFault?(reason)
+            }
+            pump()
         }
     }
-    @discardableResult func stopMotion() async -> Bool {
+    @discardableResult func stopMotion(timeout: TimeInterval = 5) async -> Bool {
         if let stopTask { return await stopTask.value }
         failPending("动作已取消")
         guard isConnected else { return true }
         let task = Task { [weak self] in
             guard let self else { return false }
-            do { _ = try await self.send(["type": "stop", "reason": "native_stop"]); return true }
+            do { _ = try await self.send(["type": "stop", "reason": "native_stop"], timeout: timeout); return true }
             catch { return false }
         }
         stopTask = task
@@ -113,15 +125,9 @@ struct LooiRobotDevice: Identifiable {
         return confirmed
     }
     private func pump() {
-        guard let active, let command, isConnected, !writeOutstanding else { return }
+        guard let active, let command, isConnected, writeOutstanding == nil else { return }
         if current == nil, !queue.isEmpty {
             let item = queue.removeFirst(); current = item
-            item.timeout = Task { [weak self, weak item] in
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-                guard !Task.isCancelled, let self, let item, self.current === item else { return }
-                if self.writeOutstanding { self.message = "蓝牙写入超时，请重新连接身体"; self.disconnect(); self.onFault?(self.message); return }
-                self.finish(.failure(LooiError.message("身体指令未确认，已暂停动作")))
-            }
         }
         guard let item = current else { return }
         if item.written { if let ack = item.ack { finish(.success(ack)) }; return }
@@ -132,7 +138,7 @@ struct LooiRobotDevice: Identifiable {
             if type == .withoutResponse && !active.canSendWriteWithoutResponse { return }
             let end = min(item.offset + size, item.bytes.count)
             let chunk = item.bytes.subdata(in: item.offset..<end); item.offset = end
-            if type == .withResponse { writeOutstanding = true; active.writeValue(chunk, for: command, type: type); return }
+            if type == .withResponse { writeOutstanding = item.id; active.writeValue(chunk, for: command, type: type); return }
             active.writeValue(chunk, for: command, type: type)
         }
         item.written = true; if let ack = item.ack { finish(.success(ack)) }
@@ -141,7 +147,7 @@ struct LooiRobotDevice: Identifiable {
         guard let item = current else { return }; current = nil; item.timeout?.cancel(); item.continuation.resume(with: result)
         if case let .failure(error) = result {
             message = error.localizedDescription
-            let dropped = queue; queue.removeAll(); dropped.forEach { $0.continuation.resume(throwing: error) }
+            let dropped = queue; queue.removeAll(); dropped.forEach { $0.timeout?.cancel(); $0.continuation.resume(throwing: error) }
             onFault?(message)
         }
         pump()
@@ -151,7 +157,7 @@ struct LooiRobotDevice: Identifiable {
         pending.forEach { $0.timeout?.cancel(); $0.continuation.resume(throwing: LooiError.message(message)) }
     }
     private func clearConnection(_ reason: String) {
-        failPending(reason); active = nil; command = nil; writeOutstanding = false; decoder.reset()
+        failPending(reason); active = nil; command = nil; writeOutstanding = nil; decoder.reset()
         connectedID = nil; connectingID = nil; onConnection?(false)
     }
     private func updatePowerMessage() {
@@ -213,8 +219,13 @@ struct LooiRobotDevice: Identifiable {
     }
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
         guard active === peripheral, characteristic.uuid == Self.commandID else { return }
-        writeOutstanding = false
-        if let error { finish(.failure(error)) } else { pump() }
+        guard let writtenID = writeOutstanding else { return }
+        writeOutstanding = nil
+        // An old cancelled write belongs to the stop barrier, not its replacement.
+        if let error {
+            if current?.id == writtenID { finish(.failure(error)) }
+            disconnect(); onFault?(error.localizedDescription)
+        } else { pump() }
     }
     func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) { if active === peripheral { pump() } }
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {

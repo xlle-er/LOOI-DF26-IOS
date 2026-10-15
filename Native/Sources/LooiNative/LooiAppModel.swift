@@ -13,6 +13,10 @@ import Combine
     let camera = LooiCamera()
     let live = LooiLiveService()
     let face = LooiFaceHost()
+    lazy var remote: LooiRemoteControl = LooiRemoteControl(connected: { [weak self] in self?.body.isConnected == true }, send: { [weak self] command in
+        guard let self, self.remote.ready else { throw CancellationError() }
+        _ = try await self.body.send(command, timeout: 0.25)
+    }, stop: { [weak self] in await self?.body.stopMotion(timeout: 0.25) ?? false })
     private var subscriptions = Set<AnyCancellable>()
     private var operation: Task<Void, Never>?
     private var textOperation: Task<Void, Never>?
@@ -27,9 +31,13 @@ import Combine
               let name = properties["name"] as? [String: Any], let values = name["enum"] as? [String] else { return [] }
         return Set(values)
     }()
-    var isBusy: Bool { recovering || phase == .starting || phase == .testing || phase == .stopping }
+    var isBusy: Bool { remote.presented || remote.state == .stopping || recovering || phase == .starting || phase == .testing || phase == .stopping }
     var isActive: Bool { phase == .active }
     init() {
+        remote.takeControl = { [weak self] in self?.settings.motionEnabled = false; self?.face.cancel() }
+        remote.stopFailed = { [weak self] in self?.notice = "停止未获确认，请检查连接后重试" }
+        remote.presentationChanged = { [weak self] visible in UIApplication.shared.isIdleTimerDisabled = visible || self?.isActive == true }
+        remote.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &subscriptions)
         camera.onFrame = { [weak self] data in self?.live.sendFrame(data) }
         face.onPhoto = { [weak self] in guard let data = self?.camera.snapshot() else { throw LooiError.message("请先开启摄像头并等待画面") }; return data }
         face.onCommand = { [weak self] payload in
@@ -38,15 +46,20 @@ import Combine
         }
         live.onScenario = { [weak self] name in
             guard let self, self.phase == .active else { throw LooiError.message("陪伴尚未开始") }
+            guard !self.remote.presented else { throw LooiError.message("手动遥控中，AI 身体动作已暂停") }
             try await self.face.run(name, allowMotion: self.settings.motionEnabled && self.body.isConnected)
         }
-        live.onCancel = { [weak self] in self?.face.cancel(); Task { await self?.body.stopMotion() } }
+        live.onCancel = { [weak self] in
+            self?.face.cancel(); guard self?.remote.presented != true else { return }
+            Task { await self?.body.stopMotion() }
+        }
         live.onImmediateStop = { [weak self] in self?.stopBodyImmediately() }
         body.onFault = { [weak self] text in
-            guard let self, !self.bodyFaultLatched else { return }; self.bodyFaultLatched = true
+            guard let self else { return }; self.remote.connectionLost()
+            guard !self.bodyFaultLatched else { return }; self.bodyFaultLatched = true
             self.settings.motionEnabled = false; self.face.cancel(); self.notice = text + "；语音可继续"
         }
-        body.onConnection = { [weak self] connected in if !connected { self?.settings.motionEnabled = false } else { self?.bodyFaultLatched = false }; self?.updateFace() }
+        body.onConnection = { [weak self] connected in if !connected { self?.settings.motionEnabled = false; self?.remote.connectionLost() } else { self?.bodyFaultLatched = false }; self?.updateFace() }
         live.$speaking.combineLatest(live.$connecting).sink { [weak self] _, _ in
             Task { @MainActor in self?.updateFace() }
         }.store(in: &subscriptions)
@@ -55,10 +68,11 @@ import Combine
     private func updateFace() { face.state(connected: body.isConnected, speaking: live.speaking, thinking: live.connecting, cameraRunning: camera.running) }
     private func stopBodyImmediately() {
         settings.motionEnabled = false; face.cancel()
+        if remote.presented { remote.emergencyStop(); notice = "手动遥控已停止"; return }
         Task { let confirmed = await body.stopMotion(); notice = confirmed ? "身体动作已停止，语音陪伴可继续。" : "停止指令未获确认，请检查机器人。" }
     }
     func start() {
-        guard phase == .idle else { return }
+        guard phase == .idle, !isBusy else { return }
         phase = .starting; token = UUID(); let current = token
         notice = "正在开始陪伴…"
         operation = Task {
@@ -85,7 +99,7 @@ import Combine
     }
     func stop() async {
         token = UUID(); operation?.cancel(); textOperation?.cancel(); textToken = UUID(); phase = .stopping
-        recovering = false
+        recovering = false; remote.close()
         live.stop(); camera.stop(); face.cancel(); settings.motionEnabled = false
         UIApplication.shared.isIdleTimerDisabled = false
         body.stopScan(); let stopped = await body.stopMotion()
@@ -119,9 +133,11 @@ import Combine
         operation = Task { do { try await live.testTone(); if current == token { notice = "提示音已输出，请确认手机媒体音量。" } } catch { if current == token { notice = error.localizedDescription } } }
     }
     func runScenario(_ name: String, manual: Bool = false) async throws {
+        guard !remote.presented else { throw LooiError.message("手动遥控中，AI 身体动作已暂停") }
         try await face.run(name, allowMotion: body.isConnected && (manual || settings.motionEnabled))
     }
     private func sendBodyCommand(_ payload: [String: Any]) async throws -> [String: Any] {
+        guard !remote.presented else { throw LooiError.message("手动遥控中，AI 身体动作已暂停") }
         let command = try LooiBodyProtocol.validated(payload, motionAllowed: settings.motionEnabled || phase == .testing)
         if command["type"] as? String == "stop" {
             guard await body.stopMotion() else { throw LooiError.message("身体停止未获确认") }; return ["ok": true]
@@ -129,7 +145,7 @@ import Combine
         return try await body.send(command)
     }
     func testMotion() {
-        guard phase == .idle, body.isConnected else { notice = "请先连接自己的机器人，再结束陪伴进行测试"; return }
+        guard phase == .idle, !isBusy, body.isConnected else { notice = "请先连接自己的机器人，再结束陪伴进行测试"; return }
         phase = .testing; let current = UUID(); token = current
         notice = "正在测试轻微左右转动，请留出空间。"
         operation = Task {
@@ -140,7 +156,7 @@ import Combine
         }
     }
     func identifyRobot() {
-        guard body.isConnected, phase == .idle else { return }
+        guard body.isConnected, phase == .idle, !isBusy else { return }
         token = UUID(); let current = token
         phase = .testing; notice = "机器人将轻轻点头，请确认是你的小伙伴。"
         operation = Task {
@@ -154,7 +170,7 @@ import Combine
         }
     }
     func testAI() {
-        guard phase == .idle else { return }; phase = .testing; token = UUID(); let current = token
+        guard phase == .idle, !isBusy else { return }; phase = .testing; token = UUID(); let current = token
         notice = "正在测试 AI…"
         operation = Task {
             do {

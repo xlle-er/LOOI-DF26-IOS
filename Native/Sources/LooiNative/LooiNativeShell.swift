@@ -51,7 +51,7 @@ import Combine
 }
 
 private enum LooiDestination: String, Identifiable {
-    case robots, settings
+    case robots, settings, remote
     var id: String { rawValue }
 }
 
@@ -74,7 +74,7 @@ struct LooiRootView: View {
                     .allowsHitTesting(false).accessibilityHidden(true)
                 if companion {
                     Color.clear.contentShape(Rectangle())
-                        .onTapGesture { withAnimation { controlsVisible.toggle() } }
+                        .onTapGesture { withAnimation { if !app.remote.presented { controlsVisible.toggle() } } }
                         .accessibilityElement().accessibilityLabel(L("陪伴画面，轻点显示退出按钮"))
                         .accessibilityAddTraits(.isButton)
                         .accessibilityAction { controlsVisible = true }
@@ -91,17 +91,21 @@ struct LooiRootView: View {
                     }
                 } else {
                     LooiSetupView(app: app, settings: app.settings, bluetooth: app.body,
-                                  showRobots: { destination = .robots }, showSettings: { destination = .settings })
+                                  showRobots: { destination = .robots }, showSettings: { destination = .settings }, showRemote: { destination = .remote })
                 }
             }
-            .task(id: controlsVisible && companion) {
-                guard controlsVisible && companion, app.settings.configuration.isLive, !UIAccessibility.isVoiceOverRunning else { return }
+            .task(id: controlsVisible && companion && !app.remote.presented) {
+                guard controlsVisible && companion, !app.remote.presented, app.settings.configuration.isLive, !UIAccessibility.isVoiceOverRunning else { return }
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
                 if !Task.isCancelled { withAnimation { controlsVisible = false } }
             }
+            .onChange(of: app.remote.presented) { visible in if visible { controlsVisible = true } }
             .onChange(of: app.phase) { _ in controlsVisible = companion }
             .onAppear { app.camera.updateOrientation() }
-            .onChange(of: geometry.size) { _ in app.camera.updateOrientation() }
+            .onChange(of: geometry.size) { _ in
+                app.camera.updateOrientation()
+                if app.remote.presented { app.remote.emergencyStop() }
+            }
         }
         .environment(\.locale, localization.locale)
         .preferredColorScheme(.dark)
@@ -109,9 +113,11 @@ struct LooiRootView: View {
             switch destination {
             case .robots: LooiRobotList(app: app, bluetooth: app.body)
             case .settings: LooiSettingsView(app: app, settings: app.settings)
+            case .remote: LooiRemoteScreen(remote: app.remote, bluetooth: app.body)
             }
         }
         .onChange(of: scenePhase) { phase in
+            if phase != .active { app.remote.emergencyStop() }
             if phase == .background { Task { await app.stop() } }
             if phase == .active { localization.refreshSystemLanguage() }
         }
@@ -129,7 +135,15 @@ struct LooiRootView: View {
                 }.buttonStyle(.plain).accessibilityIdentifier("exitCompanion")
             }
             Spacer(minLength: 0)
-            LooiCompanionControls(app: app, live: app.live, camera: app.camera, settings: app.settings, bodyService: app.body, landscape: true)
+            if app.remote.presented {
+                LooiRemoteView(remote: app.remote, bluetooth: app.body, compact: true) { app.remote.close() }
+            } else {
+                VStack(spacing: 6) {
+                    Button { app.remote.open() } label: { Label(L("遥控器"), systemImage: "gamecontroller").frame(minHeight: 44) }
+                        .disabled(!app.body.isConnected || app.isBusy)
+                    LooiCompanionControls(app: app, live: app.live, camera: app.camera, settings: app.settings, bodyService: app.body, landscape: true)
+                }
+            }
         }.padding(.horizontal, 24).padding(.vertical, 12)
     }
     private func exitCompanion() { controlsVisible = false; Task { await app.stop() } }
@@ -160,6 +174,7 @@ private struct LooiSetupView: View {
     @ObservedObject var bluetooth: LooiBluetooth
     let showRobots: () -> Void
     let showSettings: () -> Void
+    let showRemote: () -> Void
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -174,6 +189,10 @@ private struct LooiSetupView: View {
                     Divider().padding(.leading, 58)
                     setupRow(L("AI 服务"), detail: L(settings.configuration.preset.title) + " · " + (settings.configuration.isLive ? L("实时语音与视觉") : L("文字与视觉")), icon: "waveform", action: showSettings)
                 }.background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 22))
+                Button(action: showRemote) {
+                    Label(L("遥控器"), systemImage: "gamecontroller.fill").font(.headline).frame(maxWidth: .infinity, minHeight: 50)
+                        .background(Color.cyan.opacity(0.15), in: RoundedRectangle(cornerRadius: 18))
+                }.disabled(!bluetooth.isConnected || app.isBusy).accessibilityIdentifier("openRemote")
                 LooiCompanionControls(app: app, live: app.live, camera: app.camera, settings: settings, bodyService: bluetooth, landscape: false)
             }.padding(.horizontal, 22).padding(.bottom, 24)
         }.accessibilityIdentifier("companionSetup")
