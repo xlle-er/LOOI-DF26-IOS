@@ -4,7 +4,9 @@
   <img src="docs/assets/app-icon-rounded.svg" alt="LOOI iOS App icon" width="128" height="128">
 </p>
 
-[简体中文](#简体中文) · [English](#english)
+<p align="center">
+  <a href="#简体中文">简体中文</a> · <a href="#english">English</a>
+</p>
 
 ## 简体中文
 
