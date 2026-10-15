@@ -1,0 +1,16 @@
+{
+  "name": "looi-df26-ios",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:resources": "node scripts/build-resources.mjs",
+    "test:native": "python3 scripts/test-native.py",
+    "test:face": "playwright test",
+    "check:privacy": "python3 scripts/check-privacy.py"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.1",
+    "esbuild": "0.28.2"
+  }
+}
