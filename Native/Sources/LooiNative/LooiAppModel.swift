@@ -155,20 +155,7 @@ import Combine
             await body.stopMotion(); if token == current { phase = .idle }
         }
     }
-    func identifyRobot() {
-        guard body.isConnected, phase == .idle, !isBusy else { return }
-        token = UUID(); let current = token
-        phase = .testing; notice = "机器人将轻轻点头，请确认是你的小伙伴。"
-        operation = Task {
-            do {
-                _ = try await body.send(["type": "head_pitch", "pulse": 545, "duration_ms": 250])
-                try await Task.sleep(nanoseconds: 350_000_000)
-                guard current == token else { return }
-                _ = try await body.send(["type": "head_pitch", "pulse": 570, "duration_ms": 250])
-            } catch { if current == token { notice = error.localizedDescription } }
-            if current == token && phase == .testing { phase = .idle }
-        }
-    }
+
     func testAI() {
         guard phase == .idle, !isBusy else { return }; phase = .testing; token = UUID(); let current = token
         notice = "正在测试 AI…"

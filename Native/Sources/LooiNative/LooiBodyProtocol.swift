@@ -1,6 +1,7 @@
 import Foundation
 
 enum LooiBodyProtocol {
+    static let supportedCommands: Set<String> = ["motion", "stop", "ping", "config_get", "config_update", "device_status", "wifi_scan", "wifi_configure", "wifi_forget", "calibration_get", "calibration_set", "calibration_test", "control_acquire", "control_renew", "control_release", "ota_start", "ota_exit", "ota_status", "firmware_check", "firmware_install"]
     static func validated(_ payload: [String: Any], motionAllowed: Bool) throws -> [String: Any] {
         var result = payload; result.removeValue(forKey: "id")
         switch result["type"] as? String {
@@ -13,10 +14,6 @@ enum LooiBodyProtocol {
             result["duration_ms"] = bounded(result["duration_ms"], min: 50, max: 1000, fallback: 300)
             let duration = result["duration_ms"] as! Int
             result["ramp_ms"] = bounded(result["ramp_ms"], min: 0, max: min(500, duration / 2), fallback: 120)
-        case "head_pitch":
-            guard motionAllowed else { throw LooiError.message("身体动作未开启") }
-            result["pulse"] = bounded(result["pulse"], min: 500, max: 620, fallback: 570)
-            result["duration_ms"] = bounded(result["duration_ms"], min: 0, max: 2000, fallback: 350)
         case "stop", "ping", "config_get": break
         default: throw LooiError.message("不支持的身体指令")
         }

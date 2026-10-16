@@ -18,7 +18,7 @@ LOOI 桌面陪伴机器人的独立 iOS 客户端。使用 SwiftUI 原生界面�
 - **实时语音与视觉**：Gemini / Vertex Live，通过原生 WebSocket 持续收发音频，并按需发送摄像头画面；横屏保留实时摄像头预览小窗。
 - **连续语音播放**：分段缓冲、短时预缓冲、播放停滞检测和有限次数的自动恢复。
 - **手动遥控**：摇杆与方向键切换，支持独立遥控及陪伴中遥控，按住运动、松手停止。手动控制暂停 AI 身体动作；独立遥控不启动 AI 或相机。
-- **机器人列表**：显示附近设备的名称、标识后缀和信号强度，支持本地别名、“我的机器人”标记、点头识别和动作测试。
+- **机器人列表**：显示附近设备的名称、标识后缀和信号强度，支持本地别名、“我的机器人”标记、设备信息核对和动作测试。
 - **模型配置**：Gemini、Vertex AI、通义千问、Groq、Fireworks、Ollama 和兼容接口，提供默认模型，也允许自定义。实时语音仅适用于支持 Live 的提供商；其他接口使用文字 / 视觉模式。
 - **安全存储**：用户自行填写 API Key，凭据存入 iOS 钥匙串。运动需要连接机器人并明确开启许可。
 
@@ -115,7 +115,7 @@ An independent iOS client for the LOOI desktop companion robot. It uses native S
 - **Live voice and vision:** native Gemini / Vertex Live WebSocket sessions with continuous audio and optional camera frames. A small live camera preview stays visible in landscape.
 - **Streaming playback:** sliced audio buffering, a short startup buffer, stall detection and bounded automatic recovery.
 - **Manual remote:** switch between a joystick and direction pad, either independently or during companionship. Hold to drive and release to stop. Manual control pauses AI body movement; standalone remote starts neither AI nor camera.
-- **Nearby robot list:** names, identifier suffixes, signal strength, local aliases, ownership bookmarks, identification nods and motion tests.
+- **Nearby robot list:** names, identifier suffixes, signal strength, local aliases, ownership bookmarks, device information and motion tests.
 - **Provider presets:** Gemini, Vertex AI, Qwen, Groq, Fireworks, Ollama and compatible endpoints, with editable model defaults. Live speech requires a supported Live provider; other providers use text / vision requests.
 - **Local credentials:** enter your own API key; credentials are stored in the iOS Keychain. Physical movement requires a connected robot and explicit permission.
 
@@ -193,3 +193,9 @@ The automated checks cover native protocol/request/buffering/configuration behav
 - [`docs/architecture.md`](docs/architecture.md): implementation details, media lifecycle and Bluetooth protocol.
 
 Extracted from the iOS implementation in [LOOI_DF26](https://github.com/xlle-er/LOOI_DF26), retaining original eye animations and robot motion code. This copy starts with fresh Git history and excludes the original history, device UDIDs, personal signing teams, certificates, keys, photos and local build caches. See [NOTICE.md](NOTICE.md) for provenance and dependency notices.
+
+## DF26 设备管理 / Device management
+
+机器人列表中的“设备管理”支持 BLE 配网、Wi-Fi 连接与发现、电机方向校准、300 毫秒点动测试、本地 `.bin` 和在线 OTA。最终硬件不含俯仰舵机，连接后不再自动点头。首次 USB 安装和管理密码见 [Firmware 仓库](https://github.com/xlle-er/LOOI-DF26-Firmware)。在线清单使用该仓库的稳定 Release。
+
+Device management in the robot list supports BLE provisioning, LAN discovery/Wi-Fi control, persistent motor calibration, 300 ms tests, local `.bin` and online OTA. The final chassis has no pitch servo and never moves automatically for identification. See the Firmware repository for first installation and the management password. Online manifests come from its stable Releases.

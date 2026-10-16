@@ -102,12 +102,31 @@ final class LooiSettings: ObservableObject {
     private let defaults: UserDefaults
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        Self.migrateStoredScenes(defaults)
         if let data = defaults.data(forKey: "looi.native.profiles.v2"), let saved = try? JSONDecoder().decode([String: LooiAIConfiguration].self, from: data) {
             profiles = saved; configuration = saved[defaults.string(forKey: "looi.native.selected.v2") ?? "gemini"] ?? configuration
         } else if let json = defaults.string(forKey: "CapacitorStorage.looi.providers.v1"), let data = json.data(using: .utf8),
                   let old = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let entries = old["profiles"] as? [String: [String: Any]] {
             profiles = entries.mapValues { .init(legacy: $0, provider: $0["provider"] as? String ?? "rule") }
             configuration = profiles[old["selected"] as? String ?? "rule"] ?? configuration
+        }
+    }
+    private static func migrateStoredScenes(_ defaults: UserDefaults) {
+        for (key, value) in defaults.dictionaryRepresentation() where key.lowercased().contains("scenario") && (key.hasPrefix("looi.") || key.hasPrefix("CapacitorStorage.looi.")) {
+            let data = (value as? Data) ?? (value as? String)?.data(using: .utf8)
+            let object: Any? = data.flatMap { try? JSONSerialization.jsonObject(with: $0) } ?? value
+            guard let scenes = object as? [[String: Any]], !scenes.isEmpty, scenes.allSatisfy({ $0["steps"] is [[String: Any]] }) else { continue }
+            let cleaned = scenes.compactMap { scene -> [String: Any]? in
+                var result = scene
+                let steps = (scene["steps"] as! [[String: Any]]).filter { ["move", "stop", "pause", "face", "expression"].contains($0["kind"] as? String ?? "") }
+                guard steps.contains(where: { ["move", "face", "expression"].contains($0["kind"] as? String ?? "") }) else { return nil }
+                result["steps"] = steps; result.removeValue(forKey: "usesHead")
+                result["animationType"] = steps.contains(where: { $0["kind"] as? String == "move" }) ? "body" : "face"
+                return result
+            }
+            if value is String, let encoded = try? JSONSerialization.data(withJSONObject: cleaned) { defaults.set(String(data: encoded, encoding: .utf8), forKey: key) }
+            else if value is Data, let encoded = try? JSONSerialization.data(withJSONObject: cleaned) { defaults.set(encoded, forKey: key) }
+            else { defaults.set(cleaned, forKey: key) }
         }
     }
     func profile(_ provider: String) -> LooiAIConfiguration { profiles[provider] ?? .fresh(provider) }

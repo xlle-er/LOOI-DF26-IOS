@@ -5,6 +5,7 @@ struct LooiRobotList: View {
     @ObservedObject var app: LooiAppModel
     @ObservedObject var bluetooth: LooiBluetooth
     @Environment(\.dismiss) private var dismiss
+    @State private var management = false
     @State private var rename: LooiRobotDevice?
     var body: some View {
         NavigationView {
@@ -14,7 +15,8 @@ struct LooiRobotList: View {
                     Button(bluetooth.scanning ? L("停止搜索") : L("搜索附近机器人")) { if bluetooth.scanning { bluetooth.stopScan() } else { bluetooth.scan() } }
                     if bluetooth.connectingID != nil { Button(L("取消连接"), role: .cancel) { bluetooth.disconnect() } }
                 }
-                Section(header: Text(L("附近的机器人")), footer: Text(L("编号是此 iPhone 识别设备的标识。信号强弱仅供参考；同名时请核对编号、添加本机备注，再连接并用点头确认。不会自动连接信号最强的设备。"))) {
+                Section { Button(L("设备管理")) { management = true } }
+                Section(header: Text(L("附近的机器人")), footer: Text(L("编号是此 iPhone 识别设备的标识。信号强弱仅供参考；同名时请核对编号、添加本机备注，再连接并核对设备信息。不会自动连接信号最强的设备。"))) {
                     if bluetooth.devices.isEmpty { Text(bluetooth.scanning ? L("正在寻找小伙伴…") : L("尚未发现机器人，请确认身体已开机")).foregroundStyle(.secondary) }
                     ForEach(bluetooth.devices) { device in
                         LooiRobotRow(device: device, bluetooth: bluetooth, rename: { rename = device })
@@ -22,8 +24,6 @@ struct LooiRobotList: View {
                 }
                 if bluetooth.isConnected {
                     Section(header: Text(L("确认我的机器人"))) {
-                        Button(L("让已连接的机器人点头"), action: app.identifyRobot).disabled(app.phase != .idle)
-                        Text(L("点头使用头部舵机，不驱动车轮。确认无误后，可在设备菜单中添加本机备注。")).font(.caption).foregroundStyle(.secondary)
                         Button(L("动作测试"), action: app.testMotion).disabled(app.phase != .idle)
                         LooiMotionToggle(settings: app.settings, enabled: app.isActive)
                         Button(L("断开当前机器人"), role: .destructive) { Task { await bluetooth.stopMotion(); bluetooth.disconnect() } }
@@ -34,6 +34,7 @@ struct LooiRobotList: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("完成")) { dismiss() } } }
             .task { bluetooth.scan() }
             .onDisappear { bluetooth.stopScan() }
+            .sheet(isPresented: $management) { LooiDeviceManagement(robot: bluetooth, wifi: bluetooth.wifi) }
             .sheet(item: $rename) { device in LooiRobotRename(device: device, bluetooth: bluetooth) }
         }.navigationViewStyle(.stack)
     }

@@ -19,8 +19,7 @@ check(motion["duration_ms"] as? Int == 1000 && motion["ramp_ms"] as? Int == 500,
 rejects("disarmed movement") { _ = try LooiBodyProtocol.validated(["type":"motion", "linear":0.1, "angular":0.0], motionAllowed:false) }
 rejects("NaN movement") { _ = try LooiBodyProtocol.validated(["type":"motion", "linear":Double.nan, "angular":0.0], motionAllowed:true) }
 rejects("unsupported command") { _ = try LooiBodyProtocol.validated(["type":"flash_firmware"], motionAllowed:true) }
-let pitch = try LooiBodyProtocol.validated(["type":"head_pitch", "pulse":9999, "duration_ms":9999], motionAllowed:true)
-check(pitch["pulse"] as? Int == 620 && pitch["duration_ms"] as? Int == 2000, "head pitch bounds")
+rejects("removed actuator command") { _ = try LooiBodyProtocol.validated(["type":"head_pitch"], motionAllowed:true) }
 let stop = try LooiBodyProtocol.packet(["type":"stop"], id:"stop-id")
 check(stop.first == 10 && stop.last == 10, "stop separates unfinished BLE JSON")
 var decoder = LooiNotificationDecoder()
