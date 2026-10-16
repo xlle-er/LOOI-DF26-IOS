@@ -97,7 +97,7 @@ enum LooiKeychain {
 
 final class LooiSettings: ObservableObject {
     @Published private(set) var configuration = LooiAIConfiguration()
-    @Published var motionEnabled = false
+    @Published var motionEnabled = true
     private var profiles: [String: LooiAIConfiguration] = [:]
     private let defaults: UserDefaults
     init(defaults: UserDefaults = .standard) {

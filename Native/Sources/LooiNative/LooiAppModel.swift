@@ -89,6 +89,7 @@ import Combine
                     }
                 }
                 guard current == token, !Task.isCancelled else { return }
+                settings.motionEnabled = true
                 phase = .active; notice = !cameraNotice.isEmpty ? cameraNotice : config.isLive ? "可以直接说话，我在听。" : "陪伴已开始，可使用下方文字交流。"
                 UIApplication.shared.isIdleTimerDisabled = true
             } catch {
@@ -131,6 +132,15 @@ import Combine
     func testSound() {
         let current = token
         operation = Task { do { try await live.testTone(); if current == token { notice = "提示音已输出，请确认手机媒体音量。" } } catch { if current == token { notice = error.localizedDescription } } }
+    }
+    func setCompanionMotionEnabled(_ enabled: Bool) {
+        guard phase == .active, !remote.presented else { return }
+        if enabled {
+            guard body.isConnected else { return }
+            settings.motionEnabled = true
+        } else {
+            stopBodyImmediately()
+        }
     }
     func runScenario(_ name: String, manual: Bool = false) async throws {
         guard !remote.presented else { throw LooiError.message("手动遥控中，AI 身体动作已暂停") }

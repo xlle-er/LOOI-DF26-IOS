@@ -43,7 +43,7 @@ check(settings.configuration.model == "gemini-3.8-flash", "empty model gets prov
 try settings.save(settings.configuration, key:"")
 let restored = LooiSettings(defaults:defaults)
 check(restored.configuration.liveModel == "my-existing-model", "native preferences persist without keychain rewrite")
-check(restored.motionEnabled == false, "motion always starts disarmed")
+check(restored.motionEnabled == true, "companion motion is enabled by default")
 for provider in LooiProvider.all where !provider.models.isEmpty {
     let config = LooiAIConfiguration.fresh(provider.id)
     check(config.model == provider.models.first, "default model \(provider.id)")
