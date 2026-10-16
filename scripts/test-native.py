@@ -8,7 +8,7 @@ import plistlib
 import tempfile
 
 root = Path(__file__).resolve().parents[1]
-sources = ['LooiSettings', 'LooiBodyProtocol', 'LooiAIRequest', 'LooiPlaybackQueue', 'LooiLiveConfiguration', 'LooiLocalization', 'LooiConversationLanguage']
+sources = ['LooiFirmwareCache', 'LooiSettings', 'LooiBodyProtocol', 'LooiAIRequest', 'LooiPlaybackQueue', 'LooiLiveConfiguration', 'LooiLocalization', 'LooiConversationLanguage']
 with tempfile.TemporaryDirectory(prefix='looi-native-tests-') as folder:
     output = Path(folder) / 'native-checks'
     subprocess.run(['xcrun', 'swiftc', '-module-cache-path', str(Path(folder) / 'cache'),

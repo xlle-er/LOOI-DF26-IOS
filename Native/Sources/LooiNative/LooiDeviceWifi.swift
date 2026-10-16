@@ -5,6 +5,9 @@ import Darwin
 
 @MainActor final class LooiDeviceWifi: NSObject, ObservableObject, @preconcurrency NetServiceBrowserDelegate, @preconcurrency NetServiceDelegate {
     static let manifestURL = URL(string: "https://github.com/xlle-er/LOOI-DF26-Firmware/releases/latest/download/looi-s3-manifest.json")!
+    private let firmwareCache = LooiFirmwareCache(directory: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("LOOIFirmware"))
+    @Published private(set) var prepared: [String: Any]?
+    override init() { super.init(); prepared = try? firmwareCache.read()?.manifest }
     @Published private(set) var devices: [String: String] = [:]
     @Published private(set) var info: [String: Any] = [:]
     @Published private(set) var connected = false
@@ -87,12 +90,12 @@ import Darwin
         guard let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw LooiError.message("设备响应无效") }
         return value
     }
-    func upload(_ bytes: Data, name: String, expectedSHA: String? = nil) async throws {
+    func upload(_ bytes: Data, name: String, expectedSHA: String? = nil, closeHotspot: Bool = true) async throws {
         guard connected else { throw LooiError.message("请先通过 Wi-Fi 连接设备") }
         guard (32...3145728).contains(bytes.count), name.hasSuffix(".bin"), bytes.first == 0xe9 else { throw LooiError.message("请选择 ESP32-S3 应用 .bin，最大 3 MB") }
         let sha = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
         guard expectedSHA == nil || expectedSHA?.lowercased() == sha else { throw LooiError.message("固件 SHA-256 校验失败") }
-        heartbeat?.cancel(); _ = try await command(["type": "ota_start"])
+        heartbeat?.cancel(); _ = try await command(["type": "ota_start", "close_ap_after_update": closeHotspot])
         let boundary = "LOOI-\(UUID().uuidString)"
         var body = Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"firmware\"; filename=\"looi-s3.bin\"\r\nContent-Type: application/octet-stream\r\n\r\n".utf8)
         body.append(bytes); body.append(Data("\r\n--\(boundary)--\r\n".utf8))
@@ -112,11 +115,14 @@ import Darwin
     private func validate(_ release: [String: Any]) throws {
         guard release["chip"] as? String == "ESP32-S3", release["partition"] as? String == "app3M_fat9M_16MB", let size = release["size"] as? Int, (32...3145728).contains(size), let sha = release["sha256"] as? String, sha.count == 64, sha.allSatisfy({ $0.isHexDigit }), let url = release["url"] as? String, url.hasPrefix("https://github.com/xlle-er/LOOI-DF26-Firmware/releases/") else { throw LooiError.message("固件版本或分区不兼容") }
     }
-    func installRelease(_ release: [String: Any]) async throws {
+    func prepareRelease(_ release: [String: Any]) async throws {
         try validate(release)
         let bytes = try await download(URL(string: release["url"] as! String)!, limit: 3145728)
-        guard bytes.count == release["size"] as? Int else { throw LooiError.message("固件大小校验失败") }
-        try await upload(bytes, name: "looi-s3.bin", expectedSHA: release["sha256"] as? String)
+        try firmwareCache.save(bytes, manifest: release); prepared = release
+    }
+    func installPrepared(closeHotspot: Bool = true) async throws {
+        guard let cached = try firmwareCache.read() else { throw LooiError.message("请先在联网时下载固件，再连接 ESP 热点") }
+        try await upload(cached.bytes, name: "looi-s3.bin", expectedSHA: cached.manifest["sha256"] as? String, closeHotspot: closeHotspot)
     }
     private func download(_ url: URL, limit: Int) async throws -> Data {
         // URLSession validates HTTPS trust. Restrict every redirect to GitHub release hosts.

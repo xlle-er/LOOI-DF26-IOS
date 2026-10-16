@@ -149,4 +149,16 @@ check(separatedBody["systemInstruction"] != nil && (((separatedBody["contents"] 
 let separatedCompatible = try LooiAIRequest.text(.fresh("qwen"), key: "test-key", prompt: "Hello", systemInstruction: chinesePolicy)
 let separatedMessages = (try JSONSerialization.jsonObject(with: separatedCompatible.httpBody!) as! [String: Any])["messages"] as! [[String: Any]]
 check(separatedMessages[0]["role"] as? String == "system" && separatedMessages[1]["content"] as? String == "Hello", "compatible providers receive system and user roles separately")
+let firmwareDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+let firmwareBytes = Data([0xe9] + Array(repeating: UInt8(0), count: 63))
+let firmwareManifest: [String: Any] = ["version": "2.0.0", "chip": "ESP32-S3", "partition": "app3M_fat9M_16MB", "size": 64, "sha256": "27585a5e85e1a2afcb9718bcfd03a0fd8822b4cfdfd06862e3a2c0cfd1c092eb"]
+let firmwareCache = LooiFirmwareCache(directory: firmwareDirectory)
+try firmwareCache.save(firmwareBytes, manifest: firmwareManifest)
+check(try LooiFirmwareCache(directory: firmwareDirectory).read()?.bytes == firmwareBytes, "verified firmware survives cache recreation without networking")
+var corruptFirmware = firmwareBytes; corruptFirmware[3] = 1
+rejects("bad download cannot replace prepared firmware") { try firmwareCache.save(corruptFirmware, manifest: firmwareManifest) }
+check(try firmwareCache.read()?.bytes == firmwareBytes, "failed download preserves prepared package")
+try corruptFirmware.write(to: firmwareDirectory.appendingPathComponent("27585a5e85e1a2afcb9718bcfd03a0fd8822b4cfdfd06862e3a2c0cfd1c092eb.bin"))
+rejects("corrupted cached image is rejected before upload") { _ = try firmwareCache.read() }
+try FileManager.default.removeItem(at: firmwareDirectory)
 print("Native Swift checks passed: \(passed)")

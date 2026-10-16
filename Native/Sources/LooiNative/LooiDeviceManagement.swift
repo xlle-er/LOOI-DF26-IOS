@@ -14,6 +14,7 @@ struct LooiDeviceManagement: View {
     @State private var swap = false
     @State private var busy = false
     @State private var choosingFile = false
+    @State private var closeHotspot = true
     @State private var info: [String: Any] = [:]
     @State private var release: [String: Any]?
     @State private var networks: [String] = []
@@ -57,10 +58,23 @@ struct LooiDeviceManagement: View {
                     }
                     Button(L("立即停止"), role: .destructive) { Task { _ = await robot.stopMotion() } }
                 }
-                Section(header: Text(L("固件升级")), footer: Text(L("上传需要 Wi-Fi 连接。保持供电，升级后重连核对版本。"))) {
+                Section(header: Text(L("固件升级")), footer: Text(L("先联网下载并校验固件，再连接 ESP 热点上传。升级后断开热点，恢复流量或可上网的 Wi-Fi，再启动 AI 陪伴。"))) {
+                    Text(L("初版仅热点 OTA 固件：先下载 .bin，再通过 192.168.4.1 设备面板上传；首次升级后手动断开热点。"))
+                    if !info.isEmpty && info["ota_ap_shutdown_supported"] as? Bool != true { Text(L("当前设备固件不支持自动关闭，本次升级后请手动断开热点。")) }
+                    Toggle(L("升级后关闭 ESP 热点"), isOn: $closeHotspot)
+                    Text(L("需设备固件支持；关闭 ESP 热点后，手机是否自动恢复互联网由系统决定。长按 BOOT 3 秒可重新开启热点。"))
                     Button(L("选择本地 .bin")) { choosingFile = true }
                     Button(L("检查在线版本")) { run { release = try await wifi.release(); message = "在线版本：\(release?["version"] as? String ?? "")" } }
-                    if let release { Button(L("安装在线版本")) { run { try await wifi.installRelease(release); robot.disconnect(); message = "升级成功，请重连核对版本" } } }
+                    Button(L("先下载固件")) { run {
+                        message = "正在下载并校验，请保持互联网连接"
+                        let manifest: [String: Any]
+                        if let release { manifest = release } else { manifest = try await wifi.release() }
+                        try await wifi.prepareRelease(manifest); release = manifest; message = "固件已保存，可以连接 ESP 热点后离线上传"
+                    } }
+                    if let prepared = wifi.prepared {
+                        Text(L("已下载，可离线上传：") + (prepared["version"] as? String ?? ""))
+                        Button(L("上传已保存固件")) { run { try await wifi.installPrepared(closeHotspot: closeHotspot); robot.disconnect(); message = "升级成功，请断开 ESP 热点并恢复互联网，再使用 AI 陪伴；重连设备核对版本" } }.disabled(!wifi.connected)
+                    }
                     Button(L("退出升级模式")) { run { _ = try await command("ota_exit") } }
                 }.disabled(busy)
                 if busy { ProgressView() }
@@ -77,7 +91,7 @@ struct LooiDeviceManagement: View {
                     let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
                     guard (32...3145728).contains(size) else { throw LooiError.message("固件最大 3 MB") }
                     let data = try Data(contentsOf: url)
-                    try await wifi.upload(data, name: url.lastPathComponent); robot.disconnect(); message = "升级成功，请重连核对版本"
+                    try await wifi.upload(data, name: url.lastPathComponent, closeHotspot: closeHotspot); robot.disconnect(); message = "升级成功，请断开 ESP 热点并恢复互联网，再使用 AI 陪伴；重连设备核对版本"
                 }
             }
         }.navigationViewStyle(.stack)

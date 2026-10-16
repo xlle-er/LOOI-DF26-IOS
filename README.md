@@ -199,3 +199,17 @@ Extracted from the iOS implementation in [LOOI_DF26](https://github.com/xlle-er/
 机器人列表中的“设备管理”支持 BLE 配网、Wi-Fi 连接与发现、电机方向校准、300 毫秒点动测试、本地 `.bin` 和在线 OTA。最终硬件不含俯仰舵机，连接后不再自动点头。首次 USB 安装和管理密码见 [Firmware 仓库](https://github.com/xlle-er/LOOI-DF26-Firmware)。在线清单使用该仓库的稳定 Release。
 
 Device management in the robot list supports BLE provisioning, LAN discovery/Wi-Fi control, persistent motor calibration, 300 ms tests, local `.bin` and online OTA. The final chassis has no pitch servo and never moves automatically for identification. See the Firmware repository for first installation and the management password. Online manifests come from its stable Releases.
+
+## 热点升级与联网恢复 / Hotspot update and internet recovery
+
+先在有互联网时检查版本、下载并校验固件，再连接 ESP 热点上传。网页使用本机浏览器存储，App 使用自己的文件存储；已下载文件可在页面或 App 重启后继续使用。重新上传前再次校验，失败下载不会替换上一个完整包。
+
+“升级后关闭 ESP 热点”默认开启，需要设备固件 2.0.1 或更新版本支持。只有成功校验并切换到 OTA 目标分区后，下次启动才跳过自动开启热点；不会删除网络或方向设置，BLE 仍可用，长按 BOOT 3 秒可重新打开热点。该设置只影响升级后的这次启动，普通断电重启仍按原配网策略工作。关闭设备热点不保证手机自动恢复互联网，启动 AI 陪伴前应检查手机流量或可上网的 Wi-Fi。
+
+从仅热点 OTA 初版或 2.0.0 首次升级时，旧固件无法保存这个选项：先下载 `.bin`，再通过 `http://192.168.4.1/` 的设备面板上传，完成后手动断开热点。App/网页管理接口不保证兼容仅热点 OTA 初版。2.0.1 的关闭开关对安装该版本之后发起的 OTA 生效。
+
+Download and verify firmware while online, then join the ESP hotspot to upload. Prepared packages survive page/app restarts and are verified again before upload. Failed downloads preserve the last complete package.
+
+Close ESP hotspot after update is enabled by default and requires device firmware 2.0.1+. After a verified OTA activates its target partition, the next boot skips automatic hotspot startup. Network and calibration settings remain intact; BLE stays available and holding BOOT for three seconds reopens the hotspot. This is a one-boot choice; ordinary subsequent power cycles use normal provisioning behavior. Your phone decides whether internet reconnects automatically. Restore mobile data or internet Wi-Fi before AI companionship.
+
+The initial hotspot-only firmware and 2.0.0 cannot store this option. For the first upgrade, download the application `.bin`, join the hotspot and upload it through the device's own panel at `http://192.168.4.1/`, then leave the hotspot manually. Modern management APIs are not guaranteed on the initial firmware. The 2.0.1 option applies to OTA operations initiated after that firmware is installed.
