@@ -14,6 +14,7 @@ struct LooiDeviceManagement: View {
     @State private var swap = false
     @State private var busy = false
     @State private var choosingFile = false
+    @AppStorage("looi.ota.preview") private var previewUpdates = false
     @State private var closeHotspot = true
     @State private var info: [String: Any] = [:]
     @State private var release: [String: Any]?
@@ -61,19 +62,22 @@ struct LooiDeviceManagement: View {
                 Section(header: Text(L("固件升级")), footer: Text(L("先联网下载并校验固件，再连接 ESP 热点上传。升级后断开热点，恢复流量或可上网的 Wi-Fi，再启动 AI 陪伴。"))) {
                     Text(L("初版仅热点 OTA 固件：先下载 .bin，再通过 192.168.4.1 设备面板上传；首次升级后手动断开热点。"))
                     if !info.isEmpty && info["ota_ap_shutdown_supported"] as? Bool != true { Text(L("当前设备固件不支持自动关闭，本次升级后请手动断开热点。")) }
+                    Toggle(L("预览版更新"), isOn: $previewUpdates).onChange(of: previewUpdates) { _ in release = nil }
+                    Text(L("预览通道的版本可能尚未完成硬件验证。关闭后使用稳定版本。")).font(.caption)
                     Toggle(L("升级后关闭 ESP 热点"), isOn: $closeHotspot)
                     Text(L("需设备固件支持；关闭 ESP 热点后，手机是否自动恢复互联网由系统决定。长按 BOOT 3 秒可重新开启热点。"))
                     Button(L("选择本地 .bin")) { choosingFile = true }
-                    Button(L("检查在线版本")) { run { release = try await wifi.release(); message = "在线版本：\(release?["version"] as? String ?? "")" } }
+                    Button(L("检查在线版本")) { run { release = try await wifi.release(includePreview: previewUpdates); message = "在线版本：\(release?["version"] as? String ?? "")" } }
+                    if let release { Text((release["version"] as? String ?? "") + " · " + L(release["channel"] as? String == "preview" ? "预览版" : "稳定版")) }
                     Button(L("先下载固件")) { run {
                         message = "正在下载并校验，请保持互联网连接"
                         let manifest: [String: Any]
-                        if let release { manifest = release } else { manifest = try await wifi.release() }
+                        if let release { manifest = release } else { manifest = try await wifi.release(includePreview: previewUpdates) }
                         try await wifi.prepareRelease(manifest); release = manifest; message = "固件已保存，可以连接 ESP 热点后离线上传"
                     } }
                     if let prepared = wifi.prepared {
-                        Text(L("已下载，可离线上传：") + (prepared["version"] as? String ?? ""))
-                        Button(L("上传已保存固件")) { run { try await wifi.installPrepared(closeHotspot: closeHotspot); robot.disconnect(); message = "升级成功，请断开 ESP 热点并恢复互联网，再使用 AI 陪伴；重连设备核对版本" } }.disabled(!wifi.connected)
+                        Text(L("已下载，可离线上传：") + (prepared["version"] as? String ?? "") + " · " + L(prepared["channel"] as? String == "preview" ? "预览版" : "稳定版"))
+                        Button(L("上传已保存固件")) { run { try await wifi.installPrepared(closeHotspot: closeHotspot, includePreview: previewUpdates); robot.disconnect(); message = "升级成功，请断开 ESP 热点并恢复互联网，再使用 AI 陪伴；重连设备核对版本" } }.disabled(!wifi.connected || (wifi.prepared?["channel"] as? String == "preview" && !previewUpdates))
                     }
                     Button(L("退出升级模式")) { run { _ = try await command("ota_exit") } }
                 }.disabled(busy)

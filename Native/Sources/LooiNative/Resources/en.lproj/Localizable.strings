@@ -278,3 +278,8 @@
 "请先在联网时下载固件，再连接 ESP 热点" = "Download firmware while online before joining the ESP hotspot";
 "固件缓存无效，请重新下载" = "Firmware cache invalid; download again";
 "当前设备固件不支持自动关闭，本次升级后请手动断开热点。" = "Current firmware requires manually leaving the hotspot after this update.";
+"预览版更新" = "Preview firmware updates";
+"预览通道的版本可能尚未完成硬件验证。关闭后使用稳定版本。" = "Preview releases may not have completed hardware testing. Turn off to use stable releases.";
+"预览版" = "Preview";
+"稳定版" = "Stable";
+"请先开启预览版更新" = "Enable preview updates first";

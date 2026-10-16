@@ -3,8 +3,13 @@ import CryptoKit
 
 struct LooiFirmwareCache {
     let directory: URL
+    static func allowsUpdate(_ manifest: [String: Any], includePreview: Bool = false) -> Bool {
+        let channel = manifest["channel"] as? String ?? "stable"
+        return channel == "stable" || (channel == "preview" && includePreview)
+    }
     static func verify(_ bytes: Data, manifest: [String: Any]) throws {
-        guard manifest["chip"] as? String == "ESP32-S3", manifest["partition"] as? String == "app3M_fat9M_16MB", let size = manifest["size"] as? Int, (32...3145728).contains(size), let sha = manifest["sha256"] as? String, sha.count == 64, sha.allSatisfy({ $0.isHexDigit }) else { throw LooiError.message("固件版本或分区不兼容") }
+        guard ["stable", "preview"].contains(manifest["channel"] as? String ?? "stable") else { throw LooiError.message("升级通道无效") }
+        guard manifest["chip"] as? String == "ESP32-S3", ((manifest["partition"] as? String == "app3M_fat9M_16MB" && (manifest["board"] as? String ?? "n16r8") == "n16r8") || (manifest["partition"] as? String == "looi_8m" && manifest["board"] as? String == "n8r8")), let size = manifest["size"] as? Int, (32...3145728).contains(size), let sha = manifest["sha256"] as? String, sha.count == 64, sha.allSatisfy({ $0.isHexDigit }) else { throw LooiError.message("固件版本或分区不兼容") }
         guard bytes.count == size, bytes.first == 0xe9 else { throw LooiError.message("固件大小校验失败") }
         guard SHA256.hash(data: bytes).map({ String(format: "%02x", $0) }).joined() == sha.lowercased() else { throw LooiError.message("固件 SHA-256 校验失败") }
     }

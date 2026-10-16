@@ -213,3 +213,10 @@ Download and verify firmware while online, then join the ESP hotspot to upload. 
 Close ESP hotspot after update is enabled by default and requires device firmware 2.0.1+. After a verified OTA activates its target partition, the next boot skips automatic hotspot startup. Network and calibration settings remain intact; BLE stays available and holding BOOT for three seconds reopens the hotspot. This is a one-boot choice; ordinary subsequent power cycles use normal provisioning behavior. Your phone decides whether internet reconnects automatically. Restore mobile data or internet Wi-Fi before AI companionship.
 
 The initial hotspot-only firmware and 2.0.0 cannot store this option. For the first upgrade, download the application `.bin`, join the hotspot and upload it through the device's own panel at `http://192.168.4.1/`, then leave the hotspot manually. Modern management APIs are not guaranteed on the initial firmware. The 2.0.1 option applies to OTA operations initiated after that firmware is installed.
+
+
+## 预览版固件更新 / Preview firmware updates
+
+设备管理 → 固件升级提供“预览版更新”开关，默认关闭，并记住本客户端的选择。关闭时只使用稳定版更新源；开启时使用独立预览通道，版本可能尚未完成硬件验证。检查结果和已下载固件均显示通道标签。切换通道会清空当前检查结果；关闭开关后，已缓存的预览包保留，但不能上传，需重新开启或下载稳定版。手动选择本地 .bin 不受在线通道开关限制，仍执行设备兼容和校验检查。
+
+Device management → Firmware update has a persistent **Preview firmware updates** toggle, off by default. Off selects stable releases; on selects the separate preview feed. Results and offline packages show their channel. Turning previews off blocks cached preview installation without deleting the package. Manually chosen local files remain an explicit action and still undergo compatibility/checksum validation.

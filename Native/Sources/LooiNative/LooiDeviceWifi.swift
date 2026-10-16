@@ -53,7 +53,8 @@ import Darwin
     @discardableResult func refresh() async throws -> [String: Any] {
         let value = try await request("/api/status")
         guard let token = value["csrf_token"] as? String else { throw LooiError.message("设备响应无效") }
-        self.token = token; info = value; onChange?(); return value
+        self.token = token; info = value;
+        if let board = (value["hardware_profile"] as? [String: Any])?["board"] as? String, ["n16r8", "n8r8"].contains(board) { UserDefaults.standard.set(board, forKey: "looi.hardware.board") }; onChange?(); return value
     }
     func command(_ payload: [String: Any], timeout: TimeInterval = 8) async throws -> [String: Any] {
         let type = payload["type"] as? String ?? ""
@@ -70,7 +71,7 @@ import Darwin
         let result = try await checkedRequest(object, timeout: timeout)
         guard current == motionEpoch else { throw CancellationError() }
         if type == "control_acquire" { controlToken = result["control_token"] as? Int ?? 0 }
-        if ["calibration_set", "wifi_configure", "wifi_forget", "ota_start", "control_release", "firmware_check", "firmware_install"].contains(type) { controlToken = 0 }
+        if ["calibration_set", "wifi_configure", "wifi_forget", "ota_start", "control_release", "firmware_check", "firmware_install", "hardware_set"].contains(type) { controlToken = 0 }
         return result
     }
     private func checkedRequest(_ payload: [String: Any], timeout: TimeInterval) async throws -> [String: Any] {
@@ -93,6 +94,12 @@ import Darwin
     func upload(_ bytes: Data, name: String, expectedSHA: String? = nil, closeHotspot: Bool = true) async throws {
         guard connected else { throw LooiError.message("请先通过 Wi-Fi 连接设备") }
         guard (32...3145728).contains(bytes.count), name.hasSuffix(".bin"), bytes.first == 0xe9 else { throw LooiError.message("请选择 ESP32-S3 应用 .bin，最大 3 MB") }
+        if info["hardware_protocol"] as? Int == 1 {
+            let board = (info["hardware_profile"] as? [String: Any])?["board"] as? String ?? ""
+            let partition = info["partition"] as? String ?? ""
+            let marker = Data("LOOI_HW_V1|\(board)|1|\(partition)|END".utf8)
+            guard bytes.range(of: marker) != nil else { throw LooiError.message("固件与接线配置协议或板型不兼容") }
+        }
         let sha = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
         guard expectedSHA == nil || expectedSHA?.lowercased() == sha else { throw LooiError.message("固件 SHA-256 校验失败") }
         heartbeat?.cancel(); _ = try await command(["type": "ota_start", "close_ap_after_update": closeHotspot])
@@ -107,21 +114,26 @@ import Darwin
         guard (response as? HTTPURLResponse)?.statusCode == 200, value?["accepted"] as? Bool == true else { throw LooiError.message(value?["message"] as? String ?? "固件上传失败") }
         disconnect()
     }
-    func release() async throws -> [String: Any] {
-        let data = try await download(Self.manifestURL, limit: 8192)
-        guard let release = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw LooiError.message("升级清单无效") }
+    func release(includePreview: Bool = false) async throws -> [String: Any] {
+        let board = UserDefaults.standard.string(forKey: "looi.hardware.board") ?? "n16r8"
+        let url = board == "n8r8" ? URL(string: Self.manifestURL.absoluteString.replacingOccurrences(of: "looi-s3-manifest", with: "looi-s3-n8r8-manifest"))! : Self.manifestURL
+        let channelURL = includePreview ? URL(string: url.absoluteString.replacingOccurrences(of: "/latest/download/", with: "/download/preview/"))! : url
+        let data = try await download(channelURL, limit: 8192)
+        guard var release = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw LooiError.message("升级清单无效") }
+        release["channel"] = includePreview ? "preview" : "stable"
         try validate(release); return release
     }
     private func validate(_ release: [String: Any]) throws {
-        guard release["chip"] as? String == "ESP32-S3", release["partition"] as? String == "app3M_fat9M_16MB", let size = release["size"] as? Int, (32...3145728).contains(size), let sha = release["sha256"] as? String, sha.count == 64, sha.allSatisfy({ $0.isHexDigit }), let url = release["url"] as? String, url.hasPrefix("https://github.com/xlle-er/LOOI-DF26-Firmware/releases/") else { throw LooiError.message("固件版本或分区不兼容") }
+        guard release["chip"] as? String == "ESP32-S3", ((release["partition"] as? String == "app3M_fat9M_16MB" && (release["board"] as? String ?? "n16r8") == "n16r8") || (release["partition"] as? String == "looi_8m" && release["board"] as? String == "n8r8")), let size = release["size"] as? Int, (32...3145728).contains(size), let sha = release["sha256"] as? String, sha.count == 64, sha.allSatisfy({ $0.isHexDigit }), let url = release["url"] as? String, url.hasPrefix("https://github.com/xlle-er/LOOI-DF26-Firmware/releases/") else { throw LooiError.message("固件版本或分区不兼容") }
     }
     func prepareRelease(_ release: [String: Any]) async throws {
         try validate(release)
         let bytes = try await download(URL(string: release["url"] as! String)!, limit: 3145728)
         try firmwareCache.save(bytes, manifest: release); prepared = release
     }
-    func installPrepared(closeHotspot: Bool = true) async throws {
+    func installPrepared(closeHotspot: Bool = true, includePreview: Bool = false) async throws {
         guard let cached = try firmwareCache.read() else { throw LooiError.message("请先在联网时下载固件，再连接 ESP 热点") }
+        guard LooiFirmwareCache.allowsUpdate(cached.manifest, includePreview: includePreview) else { throw LooiError.message("请先开启预览版更新") }
         try await upload(cached.bytes, name: "looi-s3.bin", expectedSHA: cached.manifest["sha256"] as? String, closeHotspot: closeHotspot)
     }
     private func download(_ url: URL, limit: Int) async throws -> Data {
