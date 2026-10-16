@@ -70,15 +70,28 @@ enum LooiError: LocalizedError {
 
 enum LooiKeychain {
     private static let service = "org.example.looi.credentials"
-    private static func query(_ key: String) -> [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: key]
+    private static let services = [service, "app.looi.devfest.credentials"]
+    private static func query(_ key: String, serviceName: String? = nil) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: serviceName ?? service, kSecAttrAccount as String: key]
     }
     static func read(_ key: String) throws -> String {
-        var q = query(key); q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
-        var result: CFTypeRef?; let status = SecItemCopyMatching(q as CFDictionary, &result)
-        if status == errSecItemNotFound { return "" }
-        guard status == errSecSuccess, let data = result as? Data else { throw LooiError.message("无法读取安全凭据，请解锁手机后重试") }
-        return String(data: data, encoding: .utf8) ?? ""
+        try read(key) { query in
+            var result: CFTypeRef?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
+            return (status, result as? Data)
+        }
+    }
+    // Keep existing personal builds usable without exporting or re-entering keys.
+    static func read(_ key: String, lookup: ([String: Any]) -> (OSStatus, Data?)) throws -> String {
+        for serviceName in services {
+            var q = query(key, serviceName: serviceName)
+            q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
+            let (status, data) = lookup(q)
+            if status == errSecItemNotFound { continue }
+            guard status == errSecSuccess, let data else { throw LooiError.message("无法读取安全凭据，请解锁手机后重试") }
+            return String(data: data, encoding: .utf8) ?? ""
+        }
+        return ""
     }
     static func save(_ value: String, key: String) throws {
         let q = query(key)
@@ -90,8 +103,13 @@ enum LooiKeychain {
         } else if status != errSecSuccess { throw LooiError.message("无法更新安全凭据") }
     }
     static func delete(_ key: String) throws {
-        let status = SecItemDelete(query(key) as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else { throw LooiError.message("无法删除凭据") }
+        try delete(key) { SecItemDelete($0 as CFDictionary) }
+    }
+    static func delete(_ key: String, remove: ([String: Any]) -> OSStatus) throws {
+        for serviceName in services {
+            let status = remove(query(key, serviceName: serviceName))
+            guard status == errSecSuccess || status == errSecItemNotFound else { throw LooiError.message("无法删除凭据") }
+        }
     }
 }
 

@@ -20,7 +20,7 @@ LOOI 桌面陪伴机器人的独立 iOS 客户端。使用 SwiftUI 原生界面�
 - **手动遥控**：摇杆与方向键切换，支持独立遥控及陪伴中遥控，按住运动、松手停止。手动控制暂停 AI 身体动作；独立遥控不启动 AI 或相机。
 - **机器人列表**：显示附近设备的名称、标识后缀和信号强度，支持本地别名、“我的机器人”标记、设备信息核对和动作测试。
 - **模型配置**：Gemini、Vertex AI、通义千问、Groq、Fireworks、Ollama 和兼容接口，提供默认模型，也允许自定义。实时语音仅适用于支持 Live 的提供商；其他接口使用文字 / 视觉模式。
-- **安全存储**：用户自行填写 API Key，凭据存入 iOS 钥匙串。每次开始陪伴默认开启身体运动，仍需连接机器人；陪伴页可关闭或重新开启。停止、断连、故障和手动遥控会撤销本次许可。
+- **安全存储**：用户自行填写 API Key，凭据存入 iOS 钥匙串，并兼容读取旧个人签名版本保存的凭据。每次开始陪伴默认开启身体运动，仍需连接机器人；陪伴页可关闭或重新开启。停止、断连、故障和手动遥控会撤销本次许可。
 
 界面支持简体中文和 English，在“AI 服务 → 界面语言”中选择跟随系统、简体中文或 English。状态与错误提示会同步切换；iOS 系统权限弹窗遵循系统 / 单独 App 语言设置。
 
@@ -117,7 +117,7 @@ An independent iOS client for the LOOI desktop companion robot. It uses native S
 - **Manual remote:** switch between a joystick and direction pad, either independently or during companionship. Hold to drive and release to stop. Manual control pauses AI body movement; standalone remote starts neither AI nor camera.
 - **Nearby robot list:** names, identifier suffixes, signal strength, local aliases, ownership bookmarks, device information and motion tests.
 - **Provider presets:** Gemini, Vertex AI, Qwen, Groq, Fireworks, Ollama and compatible endpoints, with editable model defaults. Live speech requires a supported Live provider; other providers use text / vision requests.
-- **Local credentials:** enter your own API key; credentials are stored in the iOS Keychain. Body motion is enabled by default for each new companion session and requires a connected robot. Use the companion controls to disable or re-enable it. Stops, disconnects, faults and manual remote control revoke session permission.
+- **Local credentials:** enter your own API key; credentials are stored in the iOS Keychain, with compatibility for credentials saved by the original personal build. Body motion is enabled by default for each new companion session and requires a connected robot. Use the companion controls to disable or re-enable it. Stops, disconnects, faults and manual remote control revoke session permission.
 
 The app UI supports Simplified Chinese and English. In **AI services → App language**, choose System default, 简体中文 or English. App statuses and errors update with the selection; iOS permission dialogs follow the system / per-app language setting.
 

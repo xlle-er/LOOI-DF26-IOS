@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 var passed = 0
 func check(_ condition: Bool, _ name: String) {
@@ -7,6 +8,34 @@ func check(_ condition: Bool, _ name: String) {
 func rejects(_ name: String, _ action: () throws -> Void) {
     do { try action(); preconditionFailure(name) } catch { passed += 1 }
 }
+var credentialServices: [String] = []
+let legacyCredential = try LooiKeychain.read("looi.gemini.key") { query in
+    let service = query[kSecAttrService as String] as! String
+    credentialServices.append(service)
+    check(query[kSecAttrAccount as String] as? String == "looi.gemini.key", "credential fallback preserves provider account")
+    return service == "app.looi.devfest.credentials" ? (errSecSuccess, Data("legacy-test-value".utf8)) : (errSecItemNotFound, nil)
+}
+check(legacyCredential == "legacy-test-value" && credentialServices == ["org.example.looi.credentials", "app.looi.devfest.credentials"], "personal build credentials remain readable")
+credentialServices = []
+let currentCredential = try LooiKeychain.read("looi.gemini.key") { query in
+    credentialServices.append(query[kSecAttrService as String] as! String)
+    return (errSecSuccess, Data("current-test-value".utf8))
+}
+check(currentCredential == "current-test-value" && credentialServices.count == 1, "current credential takes precedence")
+let missingCredential = try LooiKeychain.read("looi.gemini.key") { _ in (errSecItemNotFound, nil) }
+check(missingCredential.isEmpty, "missing credentials still require setup")
+var lockedLookups = 0
+rejects("locked keychain does not bypass access failure") {
+    _ = try LooiKeychain.read("looi.gemini.key") { _ in lockedLookups += 1; return (errSecInteractionNotAllowed, nil) }
+}
+check(lockedLookups == 1, "access failures do not fall back to old credentials")
+var deletedServices: [String] = []
+try LooiKeychain.delete("looi.gemini.key") { query in
+    deletedServices.append(query[kSecAttrService as String] as! String)
+    return errSecItemNotFound
+}
+check(deletedServices == ["org.example.looi.credentials", "app.looi.devfest.credentials"], "deleting credentials also removes the fallback")
+rejects("credential deletion failure is reported") { try LooiKeychain.delete("looi.gemini.key") { _ in errSecAuthFailed } }
 check(LooiAIRequest.isStopRequest("请停下！"), "Mandarin immediate stop")
 check(LooiAIRequest.isStopRequest("stop moving"), "English immediate stop")
 check(!LooiAIRequest.isStopRequest("你好，今天天气如何"), "normal speech remains active")
