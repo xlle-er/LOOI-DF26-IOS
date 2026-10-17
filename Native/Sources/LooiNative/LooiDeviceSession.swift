@@ -131,7 +131,7 @@ import SwiftUI
     func install() async throws {
         if let expected = release?["version"] as? String ?? robot.wifi.prepared?["version"] as? String { UserDefaults.standard.set(expected, forKey: "looi.ota.expected.\(deviceID)") }
         if phase == "online", let release {
-            _ = try await command("firmware_install", ["version": release["version"] ?? "", "channel": preview ? "preview" : "stable", "close_ap_after_update": closeHotspot])
+            _ = try await command("firmware_install", ["version": release["version"] ?? "", "channel": release["channel"] ?? (preview ? "preview" : "stable"), "close_ap_after_update": closeHotspot])
             phase = "installing"; try await pollJob(checking: false)
         } else if let localFirmware {
             try await robot.wifi.upload(localFirmware, name: "firmware.bin", closeHotspot: closeHotspot)

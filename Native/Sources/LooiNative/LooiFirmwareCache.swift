@@ -31,3 +31,30 @@ struct LooiFirmwareCache {
         try JSONSerialization.data(withJSONObject: manifest).write(to: directory.appendingPathComponent("ready.json"), options: .atomic)
     }
 }
+
+// Compare version precedence independently of publication dates or build metadata.
+func looiCompareVersions(_ lhs: String, _ rhs: String) -> Int {
+    func parts(_ value: String) -> ([String], [String]?) {
+        let text = (value.hasPrefix("v") ? String(value.dropFirst()) : value).components(separatedBy: "+")[0]
+        let pair = text.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
+        return (pair[0].components(separatedBy: "."), pair.count > 1 ? pair[1].components(separatedBy: ".") : nil)
+    }
+    func numeric(_ s: String) -> Bool { !s.isEmpty && s.utf8.allSatisfy { $0 >= 48 && $0 <= 57 } }
+    func number(_ a: String, _ b: String) -> Int {
+        let a = String(a.drop(while: { $0 == "0" })), b = String(b.drop(while: { $0 == "0" }))
+        if a.count != b.count { return a.count > b.count ? 1 : -1 }
+        return a == b ? 0 : (a > b ? 1 : -1)
+    }
+    let (a, ap) = parts(lhs), (b, bp) = parts(rhs)
+    for i in 0..<max(a.count, b.count) {
+        let n = number(i < a.count ? a[i] : "0", i < b.count ? b[i] : "0"); if n != 0 { return n }
+    }
+    guard let ap, let bp else { return ap == nil && bp == nil ? 0 : (ap == nil ? 1 : -1) }
+    for i in 0..<min(ap.count, bp.count) where ap[i] != bp[i] {
+        let an = numeric(ap[i]), bn = numeric(bp[i])
+        if an && bn { return number(ap[i], bp[i]) }
+        if an != bn { return an ? -1 : 1 }
+        return ap[i] > bp[i] ? 1 : -1
+    }
+    return ap.count == bp.count ? 0 : (ap.count > bp.count ? 1 : -1)
+}

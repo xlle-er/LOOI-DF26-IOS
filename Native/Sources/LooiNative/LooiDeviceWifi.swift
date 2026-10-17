@@ -117,14 +117,23 @@ import Darwin
     func release(includePreview: Bool = false) async throws -> [String: Any] {
         let board = UserDefaults.standard.string(forKey: "looi.hardware.board") ?? "n16r8"
         let url = board == "n8r8" ? URL(string: Self.manifestURL.absoluteString.replacingOccurrences(of: "looi-s3-manifest", with: "looi-s3-n8r8-manifest"))! : Self.manifestURL
-        let channelURL = includePreview ? URL(string: url.absoluteString.replacingOccurrences(of: "/latest/download/", with: "/download/preview/"))! : url
-        let data = try await download(channelURL, limit: 8192)
-        guard var release = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw LooiError.message("升级清单无效") }
-        release["channel"] = includePreview ? "preview" : "stable"
-        try validate(release); return release
+        func fetch(_ channel: String) async throws -> [String: Any] {
+            let address = channel == "preview" ? URL(string: url.absoluteString.replacingOccurrences(of: "/latest/download/", with: "/download/preview/"))! : url
+            let data = try await download(address, limit: 8192)
+            guard var release = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw LooiError.message("升级清单无效") }
+            release["channel"] = channel
+            try validate(release); return release
+        }
+        if !includePreview { return try await fetch("stable") }
+        let stable = try? await fetch("stable")
+        let preview = try? await fetch("preview")
+        if let preview, stable == nil || looiCompareVersions(preview["version"] as? String ?? "0", stable?["version"] as? String ?? "0") > 0 { return preview }
+        if let stable { return stable }
+        throw LooiError.message("在线版本暂不可用")
     }
+
     private func validate(_ release: [String: Any]) throws {
-        guard release["chip"] as? String == "ESP32-S3", ((release["partition"] as? String == "app3M_fat9M_16MB" && (release["board"] as? String ?? "n16r8") == "n16r8") || (release["partition"] as? String == "looi_8m" && release["board"] as? String == "n8r8")), let size = release["size"] as? Int, (32...3145728).contains(size), let sha = release["sha256"] as? String, sha.count == 64, sha.allSatisfy({ $0.isHexDigit }), let url = release["url"] as? String, url.hasPrefix("https://github.com/xlle-er/LOOI-DF26-Firmware/releases/") else { throw LooiError.message("固件版本或分区不兼容") }
+        guard let version = release["version"] as? String, version.range(of: #"^v?[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?(?:\+[A-Za-z0-9.-]+)?$"#, options: .regularExpression) != nil, release["chip"] as? String == "ESP32-S3", ((release["partition"] as? String == "app3M_fat9M_16MB" && (release["board"] as? String ?? "n16r8") == "n16r8") || (release["partition"] as? String == "looi_8m" && release["board"] as? String == "n8r8")), let size = release["size"] as? Int, (32...3145728).contains(size), let sha = release["sha256"] as? String, sha.count == 64, sha.allSatisfy({ $0.isHexDigit }), let url = release["url"] as? String, url.hasPrefix("https://github.com/xlle-er/LOOI-DF26-Firmware/releases/") else { throw LooiError.message("固件版本或分区不兼容") }
     }
     func prepareRelease(_ release: [String: Any]) async throws {
         try validate(release)
