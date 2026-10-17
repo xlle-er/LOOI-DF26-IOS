@@ -15,10 +15,10 @@ enum LooiError: LocalizedError {
     var connected = false
     func disconnect() { connected = false }
     func connect(_ address: String, password: String) async throws { connected = true }
-    func release(includePreview: Bool) async throws -> [String: Any] { [:] }
-    func prepareRelease(_ value: [String: Any]) async throws {}
-    func upload(_ bytes: Data, name: String, closeHotspot: Bool) async throws {}
-    func installPrepared(closeHotspot: Bool, includePreview: Bool) async throws {}
+    func release(includePreview: Bool) async throws -> [String: Any] { ["version": "2.3.0"] }
+    func prepareRelease(_ value: [String: Any], progress: (@MainActor @Sendable (Double) -> Void)? = nil) async throws {}
+    func upload(_ bytes: Data, name: String, closeHotspot: Bool, progress: (@MainActor @Sendable (Double) -> Void)? = nil) async throws {}
+    func installPrepared(closeHotspot: Bool, includePreview: Bool, progress: (@MainActor @Sendable (Double) -> Void)? = nil) async throws {}
 }
 @MainActor final class LooiBluetooth {
     let wifi = FakeWifi()
@@ -53,6 +53,13 @@ enum LooiError: LocalizedError {
         assert(!session.needsWiringConfiguration)
         session.password = "12345678"; try await session.authenticate()
         assert(!session.needsPassword)
+        robot.status["firmware_version"] = "2.2.2"
+        let beforeCheck = robot.commands.count
+        try await session.checkUpdates(); assert(session.hasUpdate)
+        assert(!robot.commands.dropFirst(beforeCheck).contains { ["ota_start", "firmware_check", "firmware_install"].contains($0["type"] as? String ?? "") })
+        let update = session.transferProgress("正在下载固件"); update(0.5); assert(session.progress == 0.5)
+        session.setProgress("正在重启…"); update(0.9); assert(session.progress == nil) // late download callback cannot overwrite reboot
+
         assert(!session.diagnostics.contains("secret-session-token"))
         // Device is in OTA even though a reconnected app thinks its phase is idle.
         assert(session.phase == "idle" && session.info["ota_mode"] as? Bool == true)

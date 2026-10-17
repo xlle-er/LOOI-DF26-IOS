@@ -40,7 +40,7 @@ struct LooiDeviceManagement: View {
                     if tab == 1 { network }
                     if tab == 2 { ota }
                 }.disabled(session.busy || !robot.isConnected)
-                if session.busy { ProgressView() }
+                if session.busy { LooiOTAProgress(value: session.progress, label: session.progressLabel) }
                 if !session.message.isEmpty { Text(LM(session.message)).font(.footnote).accessibilityIdentifier("device-management-status") }
                 NavigationLink(L("管理设置")) { managementSettings }
             }
@@ -76,7 +76,7 @@ struct LooiDeviceManagement: View {
                     guard (32...3145728).contains(size) else { throw LooiError.message("固件最大 3 MB") }
                     let bytes = try Data(contentsOf: url)
                     if session.phase == "hotspot" { try session.stageLocal(bytes) }
-                    else { try await wifi.upload(bytes, name: url.lastPathComponent, closeHotspot: closeHotspot); session.release = nil; try await session.verifyReboot(expectedVersion: "") }
+                    else { try await wifi.upload(bytes, name: url.lastPathComponent, closeHotspot: closeHotspot, progress: session.transferProgress("正在上传固件")); session.release = nil; try await session.verifyReboot(expectedVersion: "") }
                 }
             }
         }.navigationViewStyle(.stack)
@@ -143,6 +143,8 @@ struct LooiDeviceManagement: View {
                 DisclosureGroup(L("旧固件帮助")) { Text(L("若无法开启热点，长按 BOOT 3 秒后连接，并通过设备网页上传固件。")) }
             }
             Text((session.info["firmware_version"] as? String ?? "—") + (session.release.map { " → " + ($0["version"] as? String ?? "") } ?? ""))
+            Button(L("检查更新")) { session.run { try await session.checkUpdates() } }.accessibilityIdentifier("checkFirmwareUpdates")
+            if session.release != nil { Text(L(session.hasUpdate ? "发现新版本" : "已是最新版本")).foregroundStyle(session.hasUpdate ? .orange : .secondary) }
             if session.phase == "idle" || session.phase == "complete" {
                 Button(L("进入升级模式")) { session.run { try await session.enter() } }
             } else if session.phase == "fallback" {
@@ -159,7 +161,7 @@ struct LooiDeviceManagement: View {
                 }
                 Button(L("选择本地 .bin")) { choosingFile = true }
             } else if session.phase == "online" || session.phase == "connected" {
-                if session.phase == "online" || session.localFirmware != nil || session.compatiblePackage(wifi.prepared) {
+                if (session.phase == "online" && session.hasUpdate) || session.localFirmware != nil || (session.phase != "online" && session.compatiblePackage(wifi.prepared)) {
                     Button(L("安装 OTA 更新")) { session.run { try await session.install() } }
                 } else { Button(L("下载固件")) { session.run { try await session.download() } } }
                 if wifi.connected { Button(L("上传 bin 更新包")) { choosingFile = true } }

@@ -369,3 +369,13 @@
 "配置接线" = "Configure motor wiring";
 "确认默认电机接线" = "Confirm default motor wiring";
 "保存接线并重启" = "Save wiring and restart";
+
+"检查更新" = "Check for updates";
+"发现新版本" = "Update available";
+"已是最新版本" = "Already up to date";
+"正在下载固件" = "Downloading firmware";
+"正在上传固件" = "Uploading firmware";
+"设备正在写入与校验" = "Device writing and verifying";
+"设备正在下载并安装" = "Device downloading and installing";
+"正在安装固件" = "Installing firmware";
+"版本已变化，请确认后再次安装" = "Release changed. Confirm and install again";

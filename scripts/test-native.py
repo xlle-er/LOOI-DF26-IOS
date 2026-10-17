@@ -32,3 +32,5 @@ with tempfile.TemporaryDirectory(prefix='looi-native-tests-') as folder:
                     *[str(root / 'Native/Sources/LooiNative' / (name + '.swift')) for name in ['LooiDeviceReadiness', 'LooiDeviceSession', 'LooiFirmwareCache', 'LooiBodyProtocol']],
                     str(root / 'Tests/device/DeviceSessionTests.swift'), '-o', str(device_output)], check=True)
     subprocess.run([str(device_output)], check=True)
+
+subprocess.run(['python3', str(root / 'scripts/test-transfers.py')], check=True)

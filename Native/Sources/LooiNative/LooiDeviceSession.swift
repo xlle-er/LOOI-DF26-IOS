@@ -11,6 +11,34 @@ import Combine
     @Published var message = ""
     @Published var phase = "idle"
     @Published var busy = false
+    @Published var progress: Double?
+    @Published var progressLabel = ""
+    private var progressID = UUID()
+    private var deviceReleaseChecked = false
+    var hasUpdate: Bool {
+        guard let available = release?["version"] as? String else { return false }
+        guard let current = info["firmware_version"] as? String else { return true }
+        return looiCompareVersions(available, current) > 0
+    }
+    func setProgress(_ label: String, _ value: Double? = nil) {
+        progressID = UUID(); progressLabel = label; progress = value.map { min(1, max(0, $0)) }
+    }
+    func transferProgress(_ label: String) -> @MainActor @Sendable (Double) -> Void {
+        setProgress(label, 0); let id = progressID
+        return { [weak self] value in
+            guard let self, self.progressID == id else { return }
+            if value >= 1 && label == "正在上传固件" { self.setProgress("设备正在写入与校验") }
+            else { self.progress = min(1, max(self.progress ?? 0, value)) }
+        }
+    }
+    func checkUpdates() async throws {
+        setProgress("正在检查版本…")
+        info = try await command("device_status"); statusAvailable = true
+        release = nil; deviceReleaseChecked = false
+        release = try await robot.wifi.release(includePreview: preview)
+        message = hasUpdate ? "发现新版本" : "已是最新版本"
+        setProgress("")
+    }
     @Published var release: [String: Any]?
     @Published var manualAddress = ""
     @Published var localFirmware: Data?
@@ -94,7 +122,7 @@ import Combine
     }
     func run(_ operation: @escaping @MainActor () async throws -> Void) {
         guard !busy else { return }; busy = true
-        Task { defer { busy = false }; do { try await operation() } catch is CancellationError {} catch { if self.phase == "checking" { self.phase = "fallback" }; message = error.localizedDescription } }
+        Task { defer { busy = false; setProgress("") }; do { try await operation() } catch is CancellationError {} catch { if self.phase == "checking" { self.phase = "fallback" }; message = error.localizedDescription } }
     }
     func enter() async throws {
         guard !password.isEmpty else { needsPassword = true; return }
@@ -111,14 +139,16 @@ import Combine
         try await hotspot()
     }
     func pollJob(checking: Bool) async throws {
+        setProgress(checking ? "正在检查版本…" : "设备正在下载并安装", checking ? nil : 0)
         for _ in 0..<600 {
             try await Task.sleep(nanoseconds: 1_000_000_000)
             do { info = try await command("ota_status") }
             catch { if !checking { try await verifyReboot(); return }; throw error }
             let state = info["ota_phase"] as? String ?? ""
             if state == "failed" { phase = "fallback"; message = info["error"] as? String ?? "设备下载失败"; return }
-            if checking && state == "ready" { release = info["release"] as? [String: Any]; phase = "online"; message = "设备已就绪"; return }
+            if checking && state == "ready" { release = info["release"] as? [String: Any]; deviceReleaseChecked = true; phase = "online"; message = hasUpdate ? "发现新版本" : "已是最新版本"; return }
             if state == "rebooting" { try await verifyReboot(); return }
+            if !checking { progress = min(1, max(0, Double(info["ota_progress"] as? Int ?? 0) / 100)) }
             message = state == "checking" ? "正在检查版本…" : "正在下载：\(info["ota_progress"] as? Int ?? 0)%"
         }
         phase = "fallback"; throw LooiError.message("升级超时，请重试")
@@ -129,6 +159,7 @@ import Combine
     }
     func compatiblePackage(_ package: [String: Any]?) -> Bool {
         guard let package, LooiFirmwareCache.allowsUpdate(package, includePreview: preview) else { return false }
+        if let release, package["version"] as? String != release["version"] as? String || package["sha256"] as? String != release["sha256"] as? String { return false }
         return (package["board"] as? String ?? "n16r8") == ((info["hardware_profile"] as? [String: Any])?["board"] as? String ?? "n16r8")
     }
     func stageLocal(_ bytes: Data) throws {
@@ -141,8 +172,9 @@ import Combine
         localFirmware = bytes; release = nil; message = "本地固件已就绪"
     }
     func download() async throws {
-        let value = try await robot.wifi.release(includePreview: preview)
-        try await robot.wifi.prepareRelease(value); release = value; localFirmware = nil; message = "固件已下载"; if robot.wifi.connected { phase = "connected" }
+        let value: [String: Any]
+        if let release { value = release } else { value = try await robot.wifi.release(includePreview: preview) }
+        try await robot.wifi.prepareRelease(value, progress: transferProgress("正在下载固件")); release = value; localFirmware = nil; message = "固件已下载"; if robot.wifi.connected { phase = "connected" }
     }
     func connectHTTP(_ address: String) async throws {
         let expected = deviceID
@@ -157,20 +189,28 @@ import Combine
         phase = "connected"
     }
     func install() async throws {
+        setProgress("正在安装固件", 0)
         if let expected = release?["version"] as? String ?? robot.wifi.prepared?["version"] as? String { UserDefaults.standard.set(expected, forKey: "looi.ota.expected.\(deviceID)") }
         if phase == "online", let release {
+            if !deviceReleaseChecked {
+                _ = try await command("firmware_check", ["channel": preview ? "preview" : "stable"])
+                try await pollJob(checking: true)
+                guard phase == "online" else { return }
+                guard self.release?["version"] as? String == release["version"] as? String, self.release?["channel"] as? String == release["channel"] as? String else { message = "版本已变化，请确认后再次安装"; return }
+            }
+            guard hasUpdate else { message = "已是最新版本"; return }
             _ = try await command("firmware_install", ["version": release["version"] ?? "", "channel": release["channel"] ?? (preview ? "preview" : "stable"), "close_ap_after_update": closeHotspot])
             phase = "installing"; try await pollJob(checking: false)
         } else if let localFirmware {
-            try await robot.wifi.upload(localFirmware, name: "firmware.bin", closeHotspot: closeHotspot)
+            try await robot.wifi.upload(localFirmware, name: "firmware.bin", closeHotspot: closeHotspot, progress: transferProgress("正在上传固件"))
             release = nil; try await verifyReboot(expectedVersion: "")
         } else {
-            try await robot.wifi.installPrepared(closeHotspot: closeHotspot, includePreview: preview)
+            try await robot.wifi.installPrepared(closeHotspot: closeHotspot, includePreview: preview, progress: transferProgress("正在上传固件"))
             try await verifyReboot()
         }
     }
     func verifyReboot(expectedVersion: String? = nil) async throws {
-        phase = "rebooting"; message = "正在重启…"
+        setProgress("正在重启…"); phase = "rebooting"; message = "正在重启…"
         let expected = expectedVersion ?? release?["version"] as? String ?? robot.wifi.prepared?["version"] as? String
         robot.wifi.disconnect()
         if let reconnectID { robot.disconnect(); try await Task.sleep(nanoseconds: 3_000_000_000); robot.connect(reconnectID) }

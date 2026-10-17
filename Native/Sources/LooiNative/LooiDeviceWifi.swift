@@ -91,7 +91,7 @@ import Darwin
         guard let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw LooiError.message("设备响应无效") }
         return value
     }
-    func upload(_ bytes: Data, name: String, expectedSHA: String? = nil, closeHotspot: Bool = true) async throws {
+    func upload(_ bytes: Data, name: String, expectedSHA: String? = nil, closeHotspot: Bool = true, progress: (@MainActor @Sendable (Double) -> Void)? = nil) async throws {
         guard connected else { throw LooiError.message("请先通过 Wi-Fi 连接设备") }
         guard (32...3145728).contains(bytes.count), name.hasSuffix(".bin"), bytes.first == 0xe9 else { throw LooiError.message("请选择 ESP32-S3 应用 .bin，最大 3 MB") }
         if info["hardware_protocol"] as? Int == 1 {
@@ -109,7 +109,10 @@ import Darwin
         var request = URLRequest(url: URL(string: "http://\(host)/update")!)
         request.httpMethod = "POST"; request.timeoutInterval = 180
         for (key, value) in ["Authorization": "Basic " + Data("admin:\(password)".utf8).base64EncodedString(), "X-OTA-Token": token, "X-Looi-Client": clientID, "X-Firmware-Size": String(bytes.count), "X-Firmware-SHA256": sha, "Content-Type": "multipart/form-data; boundary=\(boundary)"] { request.setValue(value, forHTTPHeaderField: key) }
-        let (data, response) = try await URLSession.shared.upload(for: request, from: body)
+        let delegate = LooiReleaseRedirects(progress: progress)
+        let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
+        let (data, response) = try await session.upload(for: request, from: body)
         let value = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         guard (response as? HTTPURLResponse)?.statusCode == 200, value?["accepted"] as? Bool == true else { throw LooiError.message(value?["message"] as? String ?? "固件上传失败") }
         disconnect()
@@ -135,22 +138,22 @@ import Darwin
     private func validate(_ release: [String: Any]) throws {
         guard let version = release["version"] as? String, version.range(of: #"^v?[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?(?:\+[A-Za-z0-9.-]+)?$"#, options: .regularExpression) != nil, release["chip"] as? String == "ESP32-S3", ((release["partition"] as? String == "app3M_fat9M_16MB" && (release["board"] as? String ?? "n16r8") == "n16r8") || (release["partition"] as? String == "looi_8m" && release["board"] as? String == "n8r8")), let size = release["size"] as? Int, (32...3145728).contains(size), let sha = release["sha256"] as? String, sha.count == 64, sha.allSatisfy({ $0.isHexDigit }), let url = release["url"] as? String, url.hasPrefix("https://github.com/xlle-er/LOOI-DF26-Firmware/releases/") else { throw LooiError.message("固件版本或分区不兼容") }
     }
-    func prepareRelease(_ release: [String: Any]) async throws {
+    func prepareRelease(_ release: [String: Any], progress: (@MainActor @Sendable (Double) -> Void)? = nil) async throws {
         try validate(release)
-        let bytes = try await download(URL(string: release["url"] as! String)!, limit: 3145728)
+        let bytes = try await download(URL(string: release["url"] as! String)!, limit: 3145728, progress: progress)
         try firmwareCache.save(bytes, manifest: release); prepared = release
     }
-    func installPrepared(closeHotspot: Bool = true, includePreview: Bool = false) async throws {
+    func installPrepared(closeHotspot: Bool = true, includePreview: Bool = false, progress: (@MainActor @Sendable (Double) -> Void)? = nil) async throws {
         guard let cached = try firmwareCache.read() else { throw LooiError.message("请先在联网时下载固件，再连接 ESP 热点") }
         guard LooiFirmwareCache.allowsUpdate(cached.manifest, includePreview: includePreview) else { throw LooiError.message("请先开启预览版更新") }
-        try await upload(cached.bytes, name: "looi-s3.bin", expectedSHA: cached.manifest["sha256"] as? String, closeHotspot: closeHotspot)
+        try await upload(cached.bytes, name: "looi-s3.bin", expectedSHA: cached.manifest["sha256"] as? String, closeHotspot: closeHotspot, progress: progress)
     }
-    private func download(_ url: URL, limit: Int) async throws -> Data {
+    private func download(_ url: URL, limit: Int, progress: (@MainActor @Sendable (Double) -> Void)? = nil) async throws -> Data {
         // URLSession validates HTTPS trust. Restrict every redirect to GitHub release hosts.
-        let delegate = LooiReleaseRedirects()
+        let delegate = LooiReleaseRedirects(limit: limit, progress: progress)
         let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
-        let (data, response) = try await session.data(from: url)
+        let (data, response) = try await delegate.download(url, session: session)
         guard let response = response as? HTTPURLResponse, response.statusCode == 200, data.count <= limit else { throw LooiError.message("在线版本暂不可用，或下载文件过大") }
         return data
     }
@@ -163,11 +166,5 @@ import Darwin
             let code = data.withUnsafeBytes { ptr in getnameinfo(ptr.baseAddress!.assumingMemoryBound(to: sockaddr.self), socklen_t(data.count), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) }
             if code == 0, let address = try? Self.localHost(String(cString: host)) { devices[sender.name] = address; return }
         }
-    }
-}
-private final class LooiReleaseRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
-        let trusted = request.url?.scheme == "https" && ["github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"].contains(request.url?.host ?? "")
-        completionHandler(trusted ? request : nil)
     }
 }
