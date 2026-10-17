@@ -1,7 +1,7 @@
 import Foundation
 
 enum LooiBodyProtocol {
-    static let supportedCommands: Set<String> = ["motion", "stop", "ping", "config_get", "config_update", "device_status", "wifi_scan", "wifi_configure", "wifi_forget", "calibration_get", "calibration_set", "calibration_test", "control_acquire", "control_renew", "control_release", "ota_start", "ota_exit", "ota_status", "firmware_check", "firmware_install", "hardware_get", "hardware_set"]
+    static let supportedCommands: Set<String> = ["motion", "stop", "ping", "config_get", "config_update", "device_status", "wifi_scan", "wifi_configure", "wifi_forget", "calibration_get", "calibration_set", "calibration_test", "control_acquire", "control_renew", "control_release", "ota_start", "ota_exit", "ota_status", "firmware_check", "firmware_install", "hardware_get", "hardware_set", "admin_auth", "device_name_set", "admin_password_set"]
     static func validated(_ payload: [String: Any], motionAllowed: Bool) throws -> [String: Any] {
         var result = payload; result.removeValue(forKey: "id")
         switch result["type"] as? String {

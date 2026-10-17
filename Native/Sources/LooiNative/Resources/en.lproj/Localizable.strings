@@ -283,3 +283,61 @@
 "预览版" = "Preview";
 "稳定版" = "Stable";
 "请先开启预览版更新" = "Enable preview updates first";
+
+"上传 bin 更新包" = "Upload bin package";
+"下载固件" = "Download firmware";
+"保留识别码" = "Keep device ID";
+"修改机器人名字" = "Change robot name";
+"修改管理密码" = "Change admin password";
+"先架空车轮，点动最多 300 毫秒。" = "Lift the wheels. Tests last at most 300 ms.";
+"关闭" = "Off";
+"升级固件后可修改名称和密码" = "Update firmware to change the name and password";
+"固件已下载" = "Firmware downloaded";
+"安装 OTA 更新" = "Install OTA update";
+"开启" = "On";
+"手动指定 IP（可选）" = "Manual IP override (optional)";
+"改用热点升级" = "Update via hotspot";
+"新管理密码" = "New admin password";
+"机器人名字（支持中文）" = "Robot name (Chinese supported)";
+"核对升级版本" = "Verify installed version";
+"稍后" = "Later";
+"管理设置" = "Management settings";
+"设备信息" = "Device information";
+"调试机器人" = "Debug robot";
+"进入升级模式" = "Enter update mode";
+"连接" = "Connect";
+"连接机器人" = "Connect robot";
+"连接热点" = "Connect hotspot";
+"配网" = "Wi-Fi setup";
+"重新输入管理密码" = "Re-enter admin password";
+"马达测试" = "Motor tests";
+"马达测试 · 配网 · OTA" = "Motors · Wi-Fi · OTA";
+"给机器人起个名字" = "Name your robot";
+
+
+
+
+"旧固件帮助" = "Legacy firmware help";
+
+"若无法开启热点，长按 BOOT 3 秒后连接，并通过设备网页上传固件。" = "If the hotspot cannot be opened, hold BOOT for 3 seconds, connect and upload using the device page.";
+"名字最多 24 个 UTF-8 字节" = "Name must fit 24 UTF-8 bytes";
+"密码需为 8–63 位可打印 ASCII 字符" = "Password must contain 8–63 printable ASCII characters";
+"名称已保存，请重新连接" = "Name saved. Reconnect the robot";
+"密码已保存，请重新连接" = "Password saved. Reconnect the robot";
+"设备身份不匹配" = "Device identity mismatch";
+"设备已就绪" = "Device ready";
+"正在检查版本…" = "Checking release…";
+"正在下载：%@%" = "Downloading: %@%%";
+"升级超时，请重试" = "Update timed out. Retry";
+"设备连接超时" = "Device connection timed out";
+"本地固件已就绪" = "Local firmware ready";
+"固件与设备板型不兼容" = "Firmware does not match the device board";
+"正在重启…" = "Restarting…";
+"升级完成" = "Update complete";
+"请重新连接并核对版本" = "Reconnect and verify the version";
+"局域网机器人" = "LAN robots";
+"搜索局域网" = "Find LAN robots";
+"请在系统 Wi-Fi 中连接：%@" = "Connect in system Wi-Fi settings: %@";
+"请在系统 Wi-Fi 连接该热点，再返回继续。" = "Join this hotspot in system Wi-Fi settings, then return to continue.";
+"已连接，继续" = "Connected, continue";
+"复制热点密码" = "Copy hotspot password";

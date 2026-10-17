@@ -51,7 +51,7 @@ import Combine
 }
 
 private enum LooiDestination: String, Identifiable {
-    case robots, settings, remote
+    case robots, settings, remote, debug
     var id: String { rawValue }
 }
 
@@ -91,7 +91,7 @@ struct LooiRootView: View {
                     }
                 } else {
                     LooiSetupView(app: app, settings: app.settings, bluetooth: app.body,
-                                  showRobots: { destination = .robots }, showSettings: { destination = .settings }, showRemote: { destination = .remote })
+                                  showRobots: { destination = .robots }, showDebug: { destination = .debug }, showSettings: { destination = .settings }, showRemote: { destination = .remote })
                 }
             }
             .task(id: controlsVisible && companion && !app.remote.presented) {
@@ -113,6 +113,7 @@ struct LooiRootView: View {
             switch destination {
             case .robots: LooiRobotList(app: app, bluetooth: app.body)
             case .settings: LooiSettingsView(app: app, settings: app.settings)
+            case .debug: LooiDeviceManagement(robot: app.body, wifi: app.body.wifi)
             case .remote: LooiRemoteScreen(remote: app.remote, bluetooth: app.body)
             }
         }
@@ -173,6 +174,7 @@ private struct LooiSetupView: View {
     @ObservedObject var settings: LooiSettings
     @ObservedObject var bluetooth: LooiBluetooth
     let showRobots: () -> Void
+    let showDebug: () -> Void
     let showSettings: () -> Void
     let showRemote: () -> Void
     var body: some View {
@@ -185,7 +187,8 @@ private struct LooiSetupView: View {
                         .font(.subheadline).foregroundStyle(.secondary)
                 }.padding(.top, 22)
                 VStack(spacing: 0) {
-                    setupRow(L("我的机器人"), detail: bluetooth.isConnected ? bluetooth.connectedName : L("未连接身体"), icon: "antenna.radiowaves.left.and.right", action: showRobots)
+                    setupRow(L("连接机器人"), detail: bluetooth.isConnected ? bluetooth.connectedName : L("未连接身体"), icon: "antenna.radiowaves.left.and.right", action: showRobots)
+                    setupRow(L("调试机器人"), detail: L("马达测试 · 配网 · OTA"), icon: "wrench.and.screwdriver", action: showDebug)
                     Divider().padding(.leading, 58)
                     setupRow(L("AI 服务"), detail: L(settings.configuration.preset.title) + " · " + (settings.configuration.isLive ? L("实时语音与视觉") : L("文字与视觉")), icon: "waveform", action: showSettings)
                 }.background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 22))

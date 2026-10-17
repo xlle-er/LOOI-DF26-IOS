@@ -28,16 +28,14 @@ struct LooiCompanionControls: View {
                 control(app.cameraEnabled ? L("关闭相机") : L("开启相机"), icon: camera.running ? "video.fill" : "video.slash", action: app.toggleCamera)
                 control(L("切换镜头"), icon: "arrow.triangle.2.circlepath.camera", action: app.switchCamera)
                 control(L("测试声音"), icon: "speaker.wave.2", action: app.testSound)
+                if app.isActive {
+                    control(L("允许陪伴时的身体动作"), icon: settings.motionEnabled ? "figure.walk.circle.fill" : "figure.walk.circle") { app.setCompanionMotionEnabled(!settings.motionEnabled) }
+                        .disabled(!bodyService.isConnected).foregroundStyle(settings.motionEnabled ? accent : .secondary)
+                        .accessibilityValue(settings.motionEnabled ? L("开启") : L("关闭"))
+                        .accessibilityIdentifier("companionMotionEnabled")
+                }
                 if app.isActive { control(L("恢复采集"), icon: "arrow.clockwise", action: app.recoverCapture) }
             }.disabled(app.isBusy)
-            if app.isActive {
-                Toggle(L("允许陪伴时的身体动作"), isOn: Binding(
-                    get: { settings.motionEnabled },
-                    set: { app.setCompanionMotionEnabled($0) }
-                ))
-                .disabled(!bodyService.isConnected || app.isBusy)
-                .accessibilityIdentifier("companionMotionEnabled")
-            }
             if !landscape && !app.isActive {
                 HStack(spacing: 12) {
                     Button(L("动作测试"), action: app.testMotion).disabled(!bodyService.isConnected || app.isBusy)

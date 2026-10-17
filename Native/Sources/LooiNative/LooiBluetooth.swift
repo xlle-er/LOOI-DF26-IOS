@@ -13,6 +13,7 @@ struct LooiRobotDevice: Identifiable {
 
 @MainActor final class LooiBluetooth: NSObject, ObservableObject, @preconcurrency CBCentralManagerDelegate, @preconcurrency CBPeripheralDelegate {
     let wifi = LooiDeviceWifi()
+    lazy var management = LooiDeviceSession(robot: self)
     static let service = CBUUID(string: "7f2c2b6a-2d8f-4f6b-9a59-8a7f9d7c0001")
     private static let commandID = CBUUID(string: "7f2c2b6a-2d8f-4f6b-9a59-8a7f9d7c0002")
     private static let eventsID = CBUUID(string: "7f2c2b6a-2d8f-4f6b-9a59-8a7f9d7c0003")
@@ -50,7 +51,7 @@ struct LooiRobotDevice: Identifiable {
     }
     func manage(_ payload: [String: Any], password: String) async throws -> [String: Any] {
         var command = payload; command["admin_password"] = password
-        return try await send(command)
+        return try await send(command, preferBLE: true)
     }
     private final class Command {
         let id: String
@@ -110,9 +111,9 @@ struct LooiRobotDevice: Identifiable {
         if let active { central?.cancelPeripheralConnection(active) }
         clearConnection("身体已断开")
     }
-    func send(_ payload: [String: Any], timeout: TimeInterval = 5) async throws -> [String: Any] {
+    func send(_ payload: [String: Any], timeout: TimeInterval = 5, preferBLE: Bool = false) async throws -> [String: Any] {
         guard let type = payload["type"] as? String, LooiBodyProtocol.supportedCommands.contains(type) else { throw LooiError.message("不支持的身体指令") }
-        if wifi.connected { return try await wifi.command(payload, timeout: timeout) }
+        if wifi.connected && !(preferBLE && connectedID != nil) { return try await wifi.command(payload, timeout: timeout) }
         guard stopTask == nil || payload["type"] as? String == "stop" else { throw LooiError.message("正在确认机器人停止…") }
         guard isConnected else { throw LooiError.message("请先连接自己的机器人") }
         guard queue.count < 24 else { throw LooiError.message("动作队列繁忙，请稍后重试") }
