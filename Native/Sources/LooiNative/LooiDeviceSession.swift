@@ -20,6 +20,7 @@ import Combine
     private var inspectGeneration = 0
     private var reconnectID: UUID?
     init(robot: LooiBluetooth) { self.robot = robot }
+    var needsWiringConfiguration: Bool { statusAvailable && info["hardware_configured"] as? Bool == false }
     var supportsIdentity: Bool { (info["capabilities"] as? [String] ?? []).contains("device_identity") }
     var preview: Bool { UserDefaults.standard.bool(forKey: "looi.ota.preview") }
     var closeHotspot: Bool { UserDefaults.standard.object(forKey: "looi.ota.close") as? Bool ?? true }

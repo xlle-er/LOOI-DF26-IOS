@@ -50,6 +50,7 @@ enum LooiError: LocalizedError {
         session = LooiDeviceSession(robot: robot)
         await session.inspect()
         assert(session.statusAvailable && session.needsPassword)
+        assert(!session.needsWiringConfiguration)
         session.password = "12345678"; try await session.authenticate()
         assert(!session.needsPassword)
         assert(!session.diagnostics.contains("secret-session-token"))
@@ -74,6 +75,7 @@ enum LooiError: LocalizedError {
         do { try await session.restoreDefaultWiring(); assertionFailure("Existing wiring replaced") } catch {}
         assert(!robot.commands.contains { $0["type"] as? String == "hardware_set" })
         robot.status["hardware_configured"] = false
+        await session.inspect(); assert(session.needsWiringConfiguration)
         try await session.restoreDefaultWiring()
         let repair = robot.commands.last { $0["type"] as? String == "hardware_set" }
         let profile = repair?["hardware_profile"] as? [String: Any]

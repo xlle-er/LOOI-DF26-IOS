@@ -364,3 +364,8 @@
 "保存已确认的默认接线" = "Save confirmed default wiring";
 
 "设备状态尚未确认" = "Device status has not been confirmed";
+
+"接线未配置，机器人无法移动" = "Motor wiring is not configured. The robot cannot move.";
+"配置接线" = "Configure motor wiring";
+"确认默认电机接线" = "Confirm default motor wiring";
+"保存接线并重启" = "Save wiring and restart";

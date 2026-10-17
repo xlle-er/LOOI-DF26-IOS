@@ -186,6 +186,7 @@ private struct LooiSetupView: View {
                     Text(L("准备好后开始陪伴，手机将横屏展示眼睛。"))
                         .font(.subheadline).foregroundStyle(.secondary)
                 }.padding(.top, 22)
+                LooiWiringNotice(session: bluetooth.management, connected: bluetooth.isConnected, configure: showDebug)
                 VStack(spacing: 0) {
                     setupRow(L("连接机器人"), detail: bluetooth.isConnected ? bluetooth.connectedName : L("未连接身体"), icon: "antenna.radiowaves.left.and.right", action: showRobots)
                     setupRow(L("调试机器人"), detail: L("马达测试 · 配网 · OTA"), icon: "wrench.and.screwdriver", action: showDebug)

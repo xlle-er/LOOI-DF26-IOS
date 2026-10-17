@@ -17,19 +17,26 @@ struct LooiDeviceManagement: View {
     @State private var swap = false
     @State private var networks: [String] = []
     @State private var choosingFile = false
+    @State private var confirmingWiring = false
     @AppStorage("looi.ota.preview") private var preview = false
     @AppStorage("looi.ota.close") private var closeHotspot = true
     init(robot: LooiBluetooth, wifi: LooiDeviceWifi) { self.robot = robot; self.wifi = wifi; self.session = robot.management }
     var body: some View {
         NavigationView {
             Form {
+                if robot.isConnected && session.needsWiringConfiguration {
+                    LooiWiringNotice(session: session, connected: true) {
+                        if session.password.isEmpty || session.needsPassword { session.needsPassword = true }
+                        else { confirmingWiring = true }
+                    }.listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+                }
                 Picker(L("调试机器人"), selection: $tab) {
                     Text(L("马达测试")).tag(0); Text(L("配网")).tag(1); Text("OTA").tag(2)
                 }.pickerStyle(.segmented).disabled(session.busy)
                 motionStatus
                 if !robot.isConnected { Text(L("请先连接自己的机器人")) }
                 Group {
-                    if tab == 0 { motors }
+                    if tab == 0 { motors.disabled(session.needsWiringConfiguration) }
                     if tab == 1 { network }
                     if tab == 2 { ota }
                 }.disabled(session.busy || !robot.isConnected)
@@ -38,6 +45,10 @@ struct LooiDeviceManagement: View {
                 NavigationLink(L("管理设置")) { managementSettings }
             }
             .background(LooiDeviceAccess(session: session))
+            .confirmationDialog(L("确认默认电机接线"), isPresented: $confirmingWiring, titleVisibility: .visible) {
+                Button(L("保存接线并重启")) { session.run { try await session.restoreDefaultWiring() } }
+                Button(L("取消"), role: .cancel) {}
+            } message: { Text("ENA 17 · IN1 16 · IN2 15 · IN3 7 · IN4 6 · ENB 5") }
             .navigationTitle(L("调试机器人"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(L("立即停止"), role: .destructive) { Task { _ = await robot.stopMotion() } } }
@@ -84,13 +95,9 @@ struct LooiDeviceManagement: View {
                 Label(L("升级模式中，运动已锁定"), systemImage: "lock.fill")
                 Button(L("退出升级模式并恢复控制")) { session.run { try await session.exitUpgrade() } }.disabled(session.busy)
             }
-        } else if session.info["hardware_ready"] as? Bool == false {
+        } else if session.info["hardware_ready"] as? Bool == false && !session.needsWiringConfiguration {
             Section {
                 Label(L("电机未就绪"), systemImage: "exclamationmark.triangle")
-                if LooiDeviceReadiness.defaultWiringRepair(session.info) != nil {
-                    Text("ENA 17 · IN1 16 · IN2 15 · IN3 7 · IN4 6 · ENB 5").font(.caption)
-                    Button(L("保存已确认的默认接线")) { session.run { try await session.restoreDefaultWiring() } }.disabled(session.busy)
-                }
                 Text(LM(LooiDeviceReadiness.localizedReason(session.info["hardware_error"] as? String ?? "Hardware configuration required")))
             }
         }

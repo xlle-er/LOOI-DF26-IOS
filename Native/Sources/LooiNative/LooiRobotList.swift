@@ -4,11 +4,20 @@ struct LooiRobotList: View {
     @ObservedObject private var localization = LooiLocalization.shared
     @ObservedObject var app: LooiAppModel
     @ObservedObject var bluetooth: LooiBluetooth
+    @ObservedObject private var session: LooiDeviceSession
     @Environment(\.dismiss) private var dismiss
     @State private var rename: LooiRobotDevice?
+    @State private var wiringSetup = false
+    init(app: LooiAppModel, bluetooth: LooiBluetooth) {
+        self.app = app; self.bluetooth = bluetooth; self.session = bluetooth.management
+    }
     var body: some View {
         NavigationView {
             List {
+                if bluetooth.isConnected && session.needsWiringConfiguration {
+                    LooiWiringNotice(session: session, connected: true) { wiringSetup = true }
+                        .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+                }
                 Section {
                     Label(LM(bluetooth.message), systemImage: bluetooth.scanning ? "dot.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right")
                     Button(bluetooth.scanning ? L("停止搜索") : L("搜索附近机器人")) { if bluetooth.scanning { bluetooth.stopScan() } else { bluetooth.scan() } }
@@ -37,6 +46,7 @@ struct LooiRobotList: View {
             .task { bluetooth.scan() }
             .onDisappear { bluetooth.stopScan(); bluetooth.wifi.stopDiscovery() }
             .task(id: bluetooth.connectedID) { if bluetooth.isConnected { await bluetooth.management.inspect() } }
+            .sheet(isPresented: $wiringSetup) { LooiDeviceManagement(robot: bluetooth, wifi: bluetooth.wifi) }
             .sheet(item: $rename) { device in LooiRobotRename(device: device, bluetooth: bluetooth) }
         }.navigationViewStyle(.stack)
     }

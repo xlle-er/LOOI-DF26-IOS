@@ -244,6 +244,7 @@ struct LooiRobotDevice: Identifiable {
         Task { [weak self] in
             do { _ = try await self?.send(["type": "ping"]); _ = try await self?.send(["type": "config_get"]) }
             catch { self?.message = error.localizedDescription }
+            await self?.management.inspect()
         }
     }
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
