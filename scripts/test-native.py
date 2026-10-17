@@ -8,7 +8,7 @@ import plistlib
 import tempfile
 
 root = Path(__file__).resolve().parents[1]
-sources = ['LooiFirmwareCache', 'LooiSettings', 'LooiBodyProtocol', 'LooiAIRequest', 'LooiPlaybackQueue', 'LooiLiveConfiguration', 'LooiLocalization', 'LooiConversationLanguage']
+sources = ['LooiDeviceReadiness', 'LooiFirmwareCache', 'LooiSettings', 'LooiBodyProtocol', 'LooiAIRequest', 'LooiPlaybackQueue', 'LooiLiveConfiguration', 'LooiLocalization', 'LooiConversationLanguage']
 with tempfile.TemporaryDirectory(prefix='looi-native-tests-') as folder:
     output = Path(folder) / 'native-checks'
     subprocess.run(['xcrun', 'swiftc', '-module-cache-path', str(Path(folder) / 'cache'),
@@ -26,3 +26,9 @@ with tempfile.TemporaryDirectory(prefix='looi-native-tests-') as folder:
                     *[str(root / 'Native/Sources/LooiNative' / (name + '.swift')) for name in ['LooiSettings', 'LooiBodyProtocol', 'LooiRemoteControl']],
                     str(root / 'Tests/remote/RemoteTests.swift'), '-o', str(remote_output)], check=True)
     subprocess.run([str(remote_output)], check=True)
+
+    device_output = Path(folder) / 'device-checks'
+    subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-module-cache-path', str(Path(folder) / 'cache'),
+                    *[str(root / 'Native/Sources/LooiNative' / (name + '.swift')) for name in ['LooiDeviceReadiness', 'LooiDeviceSession', 'LooiFirmwareCache', 'LooiBodyProtocol']],
+                    str(root / 'Tests/device/DeviceSessionTests.swift'), '-o', str(device_output)], check=True)
+    subprocess.run([str(device_output)], check=True)

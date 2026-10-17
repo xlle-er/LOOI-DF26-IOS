@@ -34,6 +34,7 @@ import Combine
     var isBusy: Bool { remote.presented || remote.state == .stopping || recovering || phase == .starting || phase == .testing || phase == .stopping }
     var isActive: Bool { phase == .active }
     init() {
+        remote.prepare = { [weak self] in try await self?.body.checkMotionReadiness() }
         remote.takeControl = { [weak self] in self?.settings.motionEnabled = false; self?.face.cancel() }
         remote.stopFailed = { [weak self] in self?.notice = "停止未获确认，请检查连接后重试" }
         remote.presentationChanged = { [weak self] visible in UIApplication.shared.isIdleTimerDisabled = visible || self?.isActive == true }
@@ -55,7 +56,7 @@ import Combine
         }
         live.onImmediateStop = { [weak self] in self?.stopBodyImmediately() }
         body.onFault = { [weak self] text in
-            guard let self else { return }; self.remote.connectionLost()
+            guard let self else { return }; self.remote.connectionLost(reason: text)
             guard !self.bodyFaultLatched else { return }; self.bodyFaultLatched = true
             self.settings.motionEnabled = false; self.face.cancel(); self.notice = text + "；语音可继续"
         }

@@ -213,3 +213,15 @@ assert(looiCompareVersions("v2.2.0", "2.2.0") == 0)
 assert(looiCompareVersions("2.3.0-beta", "2.2.9") > 0)
 assert(looiCompareVersions("2.3.0-1", "2.3.0-alpha") < 0)
 assert(looiCompareVersions("2.3.0-beta", "2.3.0-beta.1") < 0)
+
+assert(LooiDeviceReadiness.blockReason(["ota_mode": true, "hardware_ready": true])?.contains("升级模式") == true)
+assert(LooiDeviceReadiness.blockReason(["ota_mode": false, "hardware_ready": false, "hardware_error": "Physical Flash/PSRAM mismatch; motors disabled"])?.contains("板型") == true)
+assert(LooiDeviceReadiness.blockReason(["hardware_ready": true]) == nil)
+assert(LooiDeviceReadiness.blockReason([:]) == nil) // legacy firmware has no hardware flag
+assert(LooiDeviceReadiness.localizedReason("Device administrator password required").contains("管理密码"))
+
+let missingWiring: [String: Any] = ["hardware_configured": false, "hardware_profile": ["board": "n16r8"]]
+assert((LooiDeviceReadiness.defaultWiringRepair(missingWiring)?["pins"] as? [String: Int])?["ena"] == 17)
+assert(LooiDeviceReadiness.defaultWiringRepair(["hardware_configured": true, "hardware_profile": ["board": "n16r8"]]) == nil)
+assert(LooiDeviceReadiness.defaultWiringRepair(["hardware_configured": false, "hardware_profile": ["board": "unknown"]]) == nil)
+assert(LooiDeviceReadiness.defaultWiringRepair([:]) == nil)

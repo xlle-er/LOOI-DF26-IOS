@@ -23,10 +23,10 @@ struct LooiDeviceManagement: View {
     var body: some View {
         NavigationView {
             Form {
-                LooiDeviceAccess(session: session)
                 Picker(L("调试机器人"), selection: $tab) {
                     Text(L("马达测试")).tag(0); Text(L("配网")).tag(1); Text("OTA").tag(2)
-                }.pickerStyle(.segmented)
+                }.pickerStyle(.segmented).disabled(session.busy)
+                motionStatus
                 if !robot.isConnected { Text(L("请先连接自己的机器人")) }
                 Group {
                     if tab == 0 { motors }
@@ -37,12 +37,26 @@ struct LooiDeviceManagement: View {
                 if !session.message.isEmpty { Text(LM(session.message)).font(.footnote).accessibilityIdentifier("device-management-status") }
                 NavigationLink(L("管理设置")) { managementSettings }
             }
+            .background(LooiDeviceAccess(session: session))
             .navigationTitle(L("调试机器人"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(L("立即停止"), role: .destructive) { Task { _ = await robot.stopMotion() } } }
-                ToolbarItem(placement: .confirmationAction) { Button(L("完成")) { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button(L("完成")) {
+                    if robot.isConnected { session.run { try await session.finishDebug(); dismiss() } }
+                    // An offline robot cannot receive cleanup. Reconnection always invalidates and reloads status.
+                    else { dismiss() }
+                }.disabled(session.busy) }
             }
-            .task { await session.inspect(); loadCalibration() }
+            .task(id: robot.connectedID) { await session.inspect(); loadCalibration() }
+            .onChange(of: tab) { value in
+                if value == 0 && robot.isConnected && !session.busy {
+                    session.run {
+                        await session.inspect()
+                        if session.info["ota_mode"] as? Bool == true && !session.needsPassword { try await session.exitUpgrade() }
+                        loadCalibration()
+                    }
+                }
+            }
             .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.data]) { result in
                 session.run {
                     let url = try result.get(); guard url.pathExtension.lowercased() == "bin" else { throw LooiError.message("请选择应用 .bin 文件") }
@@ -55,6 +69,31 @@ struct LooiDeviceManagement: View {
                 }
             }
         }.navigationViewStyle(.stack)
+        .interactiveDismissDisabled(session.busy || session.info["ota_mode"] as? Bool == true)
+
+    }
+    @ViewBuilder private var motionStatus: some View {
+        if robot.isConnected && !session.statusAvailable {
+            Section {
+                Label(L("设备状态尚未确认"), systemImage: "arrow.clockwise")
+                Button(L("刷新设备状态")) { session.run { await session.inspect() } }.disabled(session.busy)
+                Button(L("退出升级模式并恢复控制")) { session.run { try await session.exitUpgrade() } }.disabled(session.busy)
+            }
+        } else if session.info["ota_mode"] as? Bool == true {
+            Section {
+                Label(L("升级模式中，运动已锁定"), systemImage: "lock.fill")
+                Button(L("退出升级模式并恢复控制")) { session.run { try await session.exitUpgrade() } }.disabled(session.busy)
+            }
+        } else if session.info["hardware_ready"] as? Bool == false {
+            Section {
+                Label(L("电机未就绪"), systemImage: "exclamationmark.triangle")
+                if LooiDeviceReadiness.defaultWiringRepair(session.info) != nil {
+                    Text("ENA 17 · IN1 16 · IN2 15 · IN3 7 · IN4 6 · ENB 5").font(.caption)
+                    Button(L("保存已确认的默认接线")) { session.run { try await session.restoreDefaultWiring() } }.disabled(session.busy)
+                }
+                Text(LM(LooiDeviceReadiness.localizedReason(session.info["hardware_error"] as? String ?? "Hardware configuration required")))
+            }
+        }
     }
     private var motors: some View {
         Group {
@@ -121,7 +160,7 @@ struct LooiDeviceManagement: View {
                 Button(L("核对升级版本")) { session.run { try await session.verifyReboot() } }
             }
             if session.phase != "idle" && session.phase != "complete" {
-                Button(L("退出升级模式")) { session.run { _ = try await session.command("ota_exit"); session.phase = "idle" } }
+                Button(L("退出升级模式")) { session.run { try await session.exitUpgrade() } }
             }
         }
     }
@@ -130,6 +169,11 @@ struct LooiDeviceManagement: View {
             Section(header: Text(L("设备信息"))) {
                 Text(session.info["name"] as? String ?? "LOOI")
                 Text(session.info["ip"] as? String ?? "192.168.4.1")
+                Button(L("刷新设备状态")) { session.run { await session.inspect() } }
+                Button(L("复制设备诊断")) { UIPasteboard.general.string = session.diagnostics }
+                if let version = session.info["firmware_version"] as? String { Text(version) }
+                if let ready = session.info["hardware_ready"] as? Bool { Text(L(ready ? "电机已就绪" : "电机未就绪")) }
+                if let reason = session.info["hardware_error"] as? String, !reason.isEmpty { Text(LM(LooiDeviceReadiness.localizedReason(reason))) }
                 TextField(L("手动指定 IP（可选）"), text: $session.manualAddress).keyboardType(.numbersAndPunctuation)
                 Button(L("连接")) { session.run { if session.info.isEmpty { session.requestNetwork(session.manualAddress.isEmpty ? "192.168.4.1" : session.manualAddress) } else { try await session.connectHTTP(session.manualAddress.isEmpty ? (session.info["ip"] as? String ?? "192.168.4.1") : session.manualAddress) } } }
                 if session.supportsIdentity {

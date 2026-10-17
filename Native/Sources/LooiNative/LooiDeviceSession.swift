@@ -1,7 +1,9 @@
-import SwiftUI
+import Foundation
+import Combine
 
 @MainActor final class LooiDeviceSession: ObservableObject {
     unowned let robot: LooiBluetooth
+    @Published var statusAvailable = false
     @Published var info: [String: Any] = [:]
     @Published var password = ""
     @Published var needsPassword = false
@@ -15,23 +17,48 @@ import SwiftUI
     private var deviceID = ""
     private var pendingHost: String?
     private var inspecting = false
+    private var inspectGeneration = 0
     private var reconnectID: UUID?
     init(robot: LooiBluetooth) { self.robot = robot }
     var supportsIdentity: Bool { (info["capabilities"] as? [String] ?? []).contains("device_identity") }
     var preview: Bool { UserDefaults.standard.bool(forKey: "looi.ota.preview") }
     var closeHotspot: Bool { UserDefaults.standard.object(forKey: "looi.ota.close") as? Bool ?? true }
+    func disconnected() {
+        inspectGeneration += 1; inspecting = false; statusAvailable = false; info = [:]
+    }
     func inspect() async {
         guard robot.isConnected, !inspecting else { return }
-        inspecting = true; defer { inspecting = false }
+        statusAvailable = false; inspecting = true
+        let generation = inspectGeneration
+        defer { if generation == inspectGeneration { inspecting = false } }
         do {
             let value = try await robot.send(["type": "device_status"], preferBLE: true)
-            guard let id = value["device_id"] as? String else { return }
-            info = value
+            guard generation == inspectGeneration, robot.isConnected, let id = value["device_id"] as? String else { return }
+            info = value; statusAvailable = true
             if let board = (value["hardware_profile"] as? [String: Any])?["board"] as? String { UserDefaults.standard.set(board, forKey: "looi.hardware.board") }
             if id != deviceID { localFirmware = nil; deviceID = id; password = (try? LooiKeychain.read("device.\(id)")) ?? ""; phase = "idle"; release = nil }
             if password.isEmpty { needsPassword = true }
             else { try await authenticate() }
-        } catch { message = error.localizedDescription }
+        } catch { if generation == inspectGeneration { message = error.localizedDescription } }
+    }
+    var diagnostics: String {
+        let safe = info.filter { !["csrf_token", "control_token", "password", "admin_password"].contains($0.key) }
+        guard let data = try? JSONSerialization.data(withJSONObject: safe, options: [.prettyPrinted, .sortedKeys]) else { return "" }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+    func restoreDefaultWiring() async throws {
+        info = try await command("device_status")
+        guard let profile = LooiDeviceReadiness.defaultWiringRepair(info) else { throw LooiError.message("设备已有接线配置，请保留现有配置") }
+        _ = try await command("hardware_set", ["hardware_profile": profile])
+        robot.disconnect(); message = "接线已保存，请重新连接"
+    }
+    func finishDebug() async throws {
+        info = try await command("device_status"); statusAvailable = true
+        if info["ota_mode"] as? Bool == true { try await exitUpgrade() }
+    }
+    func exitUpgrade() async throws {
+        _ = try await command("ota_exit")
+        info = try await command("device_status"); statusAvailable = true; phase = "idle"; release = nil; message = "已退出升级模式"
     }
     func requestNetwork(_ address: String) { pendingHost = address; needsPassword = true }
     func authenticate() async throws {
@@ -62,7 +89,7 @@ import SwiftUI
     func command(_ type: String, _ extra: [String: Any] = [:]) async throws -> [String: Any] {
         var payload = extra; payload["type"] = type
         do { return try await robot.manage(payload, password: password) }
-        catch { if error.localizedDescription.localizedCaseInsensitiveContains("password") { needsPassword = true }; throw error }
+        catch { if error.localizedDescription.localizedCaseInsensitiveContains("password") || error.localizedDescription.contains("管理密码") { needsPassword = true }; throw error }
     }
     func run(_ operation: @escaping @MainActor () async throws -> Void) {
         guard !busy else { return }; busy = true
@@ -71,7 +98,7 @@ import SwiftUI
     func enter() async throws {
         guard !password.isEmpty else { needsPassword = true; return }
         info = try await command("device_status"); reconnectID = robot.connectedID
-        _ = try await command("ota_start", ["close_ap_after_update": closeHotspot])
+        info = try await command("ota_start", ["close_ap_after_update": closeHotspot])
         if info["connected"] as? Bool == true {
             if let ip = info["ip"] as? String { try? await connectHTTP(manualAddress.isEmpty ? ip : manualAddress) }
             if (info["capabilities"] as? [String] ?? []).contains("async_ota") {
@@ -155,30 +182,5 @@ import SwiftUI
             }
         }
         message = "请重新连接并核对版本"
-    }
-}
-
-struct LooiDeviceAccess: View {
-    @ObservedObject var session: LooiDeviceSession
-    @State private var value = ""
-    @State private var error = ""
-    var body: some View {
-        Color.clear.frame(height: 0)
-            .sheet(isPresented: Binding(get: { session.needsPassword || session.needsName }, set: { if !$0 { session.needsPassword = false; session.needsName = false } })) {
-                NavigationView {
-                    Form {
-                        if session.needsPassword {
-                            SecureField(L("设备管理密码"), text: $session.password)
-                            Button(L("连接")) { session.run { do { try await session.authenticate() } catch { self.error = error.localizedDescription; throw error } } }.disabled(session.busy)
-                        } else {
-                            TextField(L("机器人名字（支持中文）"), text: $value)
-                            Button(L("保存")) { session.run { try await session.rename(value) } }.disabled(session.busy)
-                            Button(L("保留识别码")) { session.skipName() }
-                        }
-                        if !error.isEmpty { Text(LM(error)) }
-                    }.navigationTitle(L(session.needsPassword ? "设备管理密码" : "给机器人起个名字"))
-                    .toolbar { Button(L("稍后")) { if session.needsName { session.skipName() }; session.needsPassword = false } }
-                }.navigationViewStyle(.stack).interactiveDismissDisabled(session.busy)
-            }
     }
 }

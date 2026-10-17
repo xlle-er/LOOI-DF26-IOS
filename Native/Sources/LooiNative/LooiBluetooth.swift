@@ -45,9 +45,14 @@ struct LooiRobotDevice: Identifiable {
     func connectWifi(_ address: String, password: String) async throws {
         _ = await stopMotion(); disconnect()
         wifi.onChange = { [weak self] in self?.objectWillChange.send() }
-        wifi.onLost = { [weak self] in self?.onConnection?(false); self?.onFault?("Wi-Fi 连接已断开") }
+        wifi.onLost = { [weak self] in self?.management.disconnected(); self?.onConnection?(false); self?.onFault?("Wi-Fi 连接已断开") }
         try await wifi.connect(address, password: password)
         message = "Wi-Fi 已连接"; onConnection?(true)
+    }
+    func checkMotionReadiness() async throws {
+        let status = try await send(["type": "device_status"])
+        management.info = status; management.statusAvailable = true
+        if let reason = LooiDeviceReadiness.blockReason(status) { throw LooiError.message(reason) }
     }
     func manage(_ payload: [String: Any], password: String) async throws -> [String: Any] {
         var command = payload; command["admin_password"] = password
@@ -55,14 +60,15 @@ struct LooiRobotDevice: Identifiable {
     }
     private final class Command {
         let id: String
+        let type: String
         let bytes: Data
         let continuation: CheckedContinuation<[String: Any], Error>
         var offset = 0
         var written = false
         var ack: [String: Any]?
         var timeout: Task<Void, Never>?
-        init(id: String, bytes: Data, continuation: CheckedContinuation<[String: Any], Error>) {
-            self.id = id; self.bytes = bytes; self.continuation = continuation
+        init(id: String, type: String, bytes: Data, continuation: CheckedContinuation<[String: Any], Error>) {
+            self.id = id; self.type = type; self.bytes = bytes; self.continuation = continuation
         }
     }
 
@@ -120,7 +126,7 @@ struct LooiRobotDevice: Identifiable {
         let id = UUID().uuidString
         let bytes = try LooiBodyProtocol.packet(payload, id: id)
         return try await withCheckedThrowingContinuation { continuation in
-            let item = Command(id: id, bytes: bytes, continuation: continuation)
+            let item = Command(id: id, type: type, bytes: bytes, continuation: continuation)
             queue.append(item)
             // Deadline also covers waiting behind an outstanding write. A stop must
             // never wait forever after cancelling the old command's timeout.
@@ -171,7 +177,7 @@ struct LooiRobotDevice: Identifiable {
         if case let .failure(error) = result {
             message = error.localizedDescription
             let dropped = queue; queue.removeAll(); dropped.forEach { $0.timeout?.cancel(); $0.continuation.resume(throwing: error) }
-            onFault?(message)
+            if ["motion", "stop"].contains(item.type) { onFault?(message) }
         }
         pump()
     }
@@ -181,7 +187,7 @@ struct LooiRobotDevice: Identifiable {
     }
     private func clearConnection(_ reason: String) {
         failPending(reason); active = nil; command = nil; writeOutstanding = nil; decoder.reset()
-        connectedID = nil; connectingID = nil; onConnection?(false)
+        management.disconnected(); connectedID = nil; connectingID = nil; onConnection?(false)
     }
     private func updatePowerMessage() {
         switch central?.state {
@@ -258,7 +264,7 @@ struct LooiRobotDevice: Identifiable {
         for value in values {
             guard let id = value["id"] as? String, let item = current, id == item.id,
                   let type = value["type"] as? String else { continue }
-            if type == "error" || value["accepted"] as? Bool == false { finish(.failure(LooiError.message(value["message"] as? String ?? "机器人拒绝指令"))) }
+            if type == "error" || value["accepted"] as? Bool == false { finish(.failure(LooiError.message(LooiDeviceReadiness.localizedReason(value["message"] as? String ?? "机器人拒绝指令")))) }
             else if ["ack", "pong", "config"].contains(type) { item.ack = value; if item.written { finish(.success(value)) } }
         }
     }

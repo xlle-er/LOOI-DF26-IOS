@@ -25,6 +25,7 @@ struct LooiDriveVector: Equatable {
     @Published private(set) var moving = false
     @Published var mode: Mode = .joystick { didSet { if mode != oldValue { emergencyStop() } } }
     @Published var speed = 0.15
+    var prepare: (@MainActor () async throws -> Void)?
     var takeControl: (() -> Void)?
     var presentationChanged: ((Bool) -> Void)?
     var stopFailed: (() -> Void)?
@@ -47,9 +48,9 @@ struct LooiDriveVector: Equatable {
     }
     func close() { guard presented else { return }; presented = false; presentationChanged?(false); halt(closing: true) }
     func emergencyStop() { guard presented else { return }; halt(closing: false) }
-    func connectionLost() {
+    func connectionLost(reason: String? = nil) {
         guard presented, state != .failed else { return }
-        invalidate(); state = .failed; message = "遥控连接已中断，请重新连接机器人后重试"
+        invalidate(); state = .failed; message = reason ?? "遥控连接已中断，请重新连接机器人后重试"
         // A rejected command can fault while the link is still alive. Attempt a
         // bounded stop once; repeated faults must not recursively enqueue stops.
         let token = epoch
@@ -68,6 +69,14 @@ struct LooiDriveVector: Equatable {
             guard token == epoch else { return }
             if !confirmed { stopFailed?() }
             if closing { state = .inactive; return }
+            if confirmed && connected() {
+                do { try await prepare?() }
+                catch {
+                    guard token == epoch else { return }
+                    state = .failed; message = error.localizedDescription; return
+                }
+            }
+            guard token == epoch else { return }
             state = confirmed && connected() ? .ready : .failed
             message = state == .ready ? "按住操作，松手停止" : "停止未获确认，请检查连接后重试"
         }
@@ -100,7 +109,7 @@ struct LooiDriveVector: Equatable {
                     }
                 } catch {
                     guard token == epoch else { return }
-                    invalidate(); state = .failed; message = "遥控指令未获确认，已停止续发，请检查机器人"
+                    invalidate(); state = .failed; message = error.localizedDescription
                     _ = await stop(); return
                 }
                 try? await Task.sleep(nanoseconds: tick)

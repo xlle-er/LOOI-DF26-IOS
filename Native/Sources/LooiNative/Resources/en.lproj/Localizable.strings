@@ -341,3 +341,26 @@
 "请在系统 Wi-Fi 连接该热点，再返回继续。" = "Join this hotspot in system Wi-Fi settings, then return to continue.";
 "已连接，继续" = "Connected, continue";
 "复制热点密码" = "Copy hotspot password";
+
+"请先输入设备管理密码" = "Enter the device admin password first";
+"升级模式中，运动已锁定，请先退出升级模式" = "Motion is locked in update mode. Exit update mode first";
+"电机接线尚未配置" = "Motor wiring has not been configured";
+"运动未获许可，请在调试页检查升级锁定与电机状态" = "Motion was refused. Check update mode and motor status in Debug robot";
+"机器人正由其他客户端控制" = "Another client is controlling the robot";
+"电机 PWM 初始化失败" = "Motor PWM initialization failed";
+"固件板型与设备 Flash/PSRAM 不匹配" = "Firmware board profile does not match device Flash/PSRAM";
+"电机接线配置无效" = "Motor wiring configuration is invalid";
+"升级模式中，运动已锁定" = "Motion is locked in update mode";
+"退出升级模式并恢复控制" = "Exit update mode and restore control";
+"电机未就绪" = "Motors not ready";
+"电机已就绪" = "Motors ready";
+"刷新设备状态" = "Refresh device status";
+"复制设备诊断" = "Copy device diagnostics";
+"已退出升级模式" = "Exited update mode";
+"输入管理密码" = "Enter admin password";
+
+"设备已有接线配置，请保留现有配置" = "The device already has wiring configured. Keep the existing configuration";
+"接线已保存，请重新连接" = "Wiring saved. Reconnect the robot";
+"保存已确认的默认接线" = "Save confirmed default wiring";
+
+"设备状态尚未确认" = "Device status has not been confirmed";

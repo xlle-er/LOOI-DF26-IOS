@@ -132,6 +132,17 @@ import Foundation
         retrying.connectionLost(); retrying.retry(); await wait { retrying.ready }
         check(fault.stops == priorStops + 1, "old fault recovery cannot interfere with a new retry")
         retrying.close()
+        let locked = FakeRobot(); let checked = locked.make()
+        var blocked = true
+        checked.prepare = { if blocked { throw LooiError.message("升级模式中，运动已锁定") } }
+        checked.open(); await wait { checked.state == .failed }
+        check(checked.message == "升级模式中，运动已锁定", "preflight reports the actual motion lock")
+        check(checked.begin() == nil && locked.commands.isEmpty, "locked controller never sends motion")
+        blocked = false; checked.retry(); await wait { checked.ready }
+        check(checked.ready, "explicit exit followed by retry restores control")
+        checked.connectionLost(reason: "电机未就绪")
+        check(checked.message == "电机未就绪", "application rejection preserves reason instead of blaming connection")
+        checked.close(); await wait { checked.state == .inactive }
         print("Remote control checks passed: \(passed)")
     }
 }
